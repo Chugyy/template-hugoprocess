@@ -1,9 +1,0 @@
-{
-  "email": "test_1761112833@test.com",
-  "password": "TestPass123!",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0XzE3NjExMTI4MzMiLCJleHAiOjE3NjExOTkzMTh9.pIJsqKsiCvDjjDMNWDJPSgJQSeQ5KRonIXYw3Re6IeM",
-  "user_id": 6,
-  "contacts": [74, 75, 76],
-  "projects": [12, 13, 14],
-  "tasks": [70, 71, 72, 73, 74]
-}

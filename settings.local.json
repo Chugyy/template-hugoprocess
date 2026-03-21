@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(python:*)",
+      "Bash(npm run build)",
+      "Bash(npx tsc --noEmit --skipLibCheck)"
+    ],
+    "deny": [],
+    "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay -v 0.3 .claude/resources/sounds/task-completed.mp3"
+          }
+        ]
+      }
+    ]
+  },
+  "spinnerTipsEnabled": false,
+  "remote": {
+    "defaultEnvironmentId": "env_017gAt5tkjYCvx7wuGgwMqjx"
+  }
+}
