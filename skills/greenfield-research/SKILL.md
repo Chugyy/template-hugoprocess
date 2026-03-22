@@ -1,47 +1,45 @@
 ---
 name: greenfield-research
 description: >
-  Recherche et validation post-PRD. Boucle itérative en 3 phases :
-  Identify (quoi chercher + questions user) → Research (fetch docs, APIs, libs) →
-  Validate (complet ou besoin de + d'info). Produit docs/to-resarch.md.
+  Recherche technique des services externes identifiés dans les jobs.
+  Boucle : fetch docs → extraire I/O, limites, coûts, impact DB → valider.
+  Facultatif si tout est local. Produit docs/to-resarch.md.
 allowed-tools: Read, Write, WebSearch, WebFetch, Glob, Grep
 model: opus
 user-invocable: true
 disable-model-invocation: true
 ---
 
-# Du PRD à la recherche technique
+# De la liste des services à la documentation technique
 
-Boucle itérative qui identifie, recherche et valide toutes les dépendances externes avant l'architecture.
+Recherche ciblée sur les services externes identifiés dans `/greenfield-jobs`. Si aucun service externe → SKIP cette étape.
 
 ## Prérequis
 
-→ Lire `docs/prd.md` — Si absent, STOP et recommander `/greenfield-prd`
+→ Lire `docs/prd.md` — Si absent, STOP → `/greenfield-prd`
+→ Lire `docs/architecture/backend/fr-mapping.md` — Si absent, STOP → `/greenfield-jobs`
+→ Identifier les services externes depuis le fr-mapping (type = Service, catégorie = API externe)
 → Lire `docs/to-resarch.md` si existant (reprendre où on en était)
+
+**Si aucun service externe identifié** : écrire un `docs/to-resarch.md` minimal (aucun service externe) et SKIP → `/greenfield-architecture`
 
 ---
 
 ## PHASE 1 — Identify
 
-**Objectif** : Lister tout ce qu'on doit chercher et poser les questions nécessaires.
+### 1.1 Liste des services à documenter
 
-### 1.1 Analyse du PRD
+Depuis le fr-mapping, lister tous les services externes avec :
+- Nom du service + provider choisi (validé dans `/greenfield-jobs`)
+- Dans quels jobs il est utilisé
+- Ce qu'on attend de lui (input/output attendus)
 
-Depuis `docs/prd.md`, identifier :
+### 1.2 Questions complémentaires (si nécessaire)
 
-1. **Services externes** — APIs tierces à intégrer (paiement, scraping, AI, email, storage...)
-2. **Librairies Python** — Packages non-standard nécessaires (SDK, parsers, workers...)
-3. **Décisions techniques ouvertes** — Choix non encore actés (quel provider, quel modèle, quel Actor...)
-4. **Credentials nécessaires** — Toutes les clés API, tokens, secrets à obtenir
-
-### 1.2 Questions utilisateur
-
-Pour chaque élément identifié, formuler des questions concrètes :
-- Préférences (ex: "Stripe ou Lemon Squeezy pour le paiement ?")
-- Informations manquantes (ex: "Quels Actors Apify utilisez-vous ?")
-- Choix techniques (ex: "Claude Sonnet ou Opus pour la génération ?")
-
-**Présenter les questions à l'utilisateur et attendre ses réponses avant de continuer.**
+Poser des questions UNIQUEMENT si des infos manquent pour la recherche :
+- Credentials existants ("Tu as déjà un compte Stripe ?")
+- Environnement test/sandbox disponible
+- Contraintes spécifiques non mentionnées
 
 ### 1.3 Écriture initiale
 
@@ -52,7 +50,7 @@ Pour chaque élément identifié, formuler des questions concrètes :
 
 ## Statut
 
-| Element | Statut |
+| Service | Statut |
 |---------|--------|
 | {service} | {À CHERCHER / EN COURS / DOCUMENTÉ / BLOQUÉ — raison} |
 
@@ -65,12 +63,6 @@ Pour chaque élément identifié, formuler des questions concrètes :
 | Service | Ce qu'il faut | Statut |
 |---------|--------------|--------|
 | {service} | {clé(s) nécessaire(s)} | {EN ATTENTE / FOURNI} |
-
-### Décisions en attente
-
-| Question | Impact |
-|----------|--------|
-| {question} | {impact sur l'architecture/build} |
 
 ---
 
@@ -96,22 +88,19 @@ Pour chaque élément identifié, formuler des questions concrètes :
 #### Limites & Coûts
 - **Rate limits** : {X req/min, etc.}
 - **Coût** : {pricing pertinent pour notre usage}
-- **Taille max** : {si applicable — upload, payload, etc.}
+- **Taille max** : {si applicable}
 
 #### Patterns recommandés
 - {best practices d'intégration issues de la doc officielle}
 - {gestion d'erreurs, retries, idempotence}
 
+#### Exemples de code
+- {snippet d'appel réel issu de la doc ou SDK}
+- {snippet de parsing de réponse}
+
 #### Impact architecture
 - **Tables DB** : {tables/colonnes nécessaires pour ce service}
 - **Config** : {variables d'environnement nécessaires}
-
----
-
-## Décisions d'architecture actées
-
-### {Sujet}
-- {décision et justification}
 
 ---
 
@@ -121,41 +110,22 @@ Pour chaque élément identifié, formuler des questions concrètes :
 # === {Category} ===
 {VAR_NAME}=               # {description, statut}
 ```
-
----
-
-## Prochaine étape
-
-{Ce qui reste à faire / Ce qui est prêt}
 ```
 
 ---
 
 ## PHASE 2 — Research
 
-**Objectif** : Pour chaque service identifié (statut "À CHERCHER"), aller récupérer la documentation.
+Pour chaque service (statut "À CHERCHER") :
 
-### Process par service
-
-1. **Trouver la doc officielle** — WebSearch pour `{service} python sdk documentation`
-2. **Fetch la doc pertinente** — WebFetch sur les pages clés (quickstart, API reference, pricing)
-3. **Extraire** :
-   - SDK Python recommandé + version
-   - Méthode d'authentification
-   - Endpoints/méthodes qu'on va utiliser (basé sur les FR du PRD)
-   - Format exact des requêtes et réponses
-   - Limites (rate limits, taille max, quotas)
-   - Coût estimé pour notre usage
-   - Patterns d'intégration recommandés (retry, error handling, webhooks)
-4. **Identifier l'impact architecture** :
-   - Tables/colonnes DB nécessaires (ex: `stripe_customer_id`, `webhook_events`)
-   - Types de données à stocker
-   - Flows asynchrones (webhooks, callbacks)
-5. **Mettre à jour** la section du service dans `docs/to-resarch.md`
+1. **WebSearch** `{service} python sdk documentation`
+2. **WebFetch** pages clés (quickstart, API reference, pricing)
+3. **Extraire** : SDK + version, auth, endpoints, formats I/O, limites, coûts, patterns, exemples de code
+4. **Impact architecture** : tables/colonnes DB, types, flows async (webhooks)
+5. **Mettre à jour** la section dans `docs/to-resarch.md`
 
 ### Ordre de recherche
 
-Prioriser par impact :
 1. Services qui influencent le schema DB (paiement, auth externe)
 2. Services coeur métier (AI, scraping)
 3. Services utilitaires (email, storage)
@@ -164,49 +134,37 @@ Prioriser par impact :
 
 ## PHASE 3 — Validate
 
-**Objectif** : Vérifier la complétude et décider : boucler ou continuer.
+### Checklist par service
 
-### Checklist de validation
-
-Pour chaque service :
 - [ ] Documentation récupérée et résumée
-- [ ] Format I/O documenté
+- [ ] Format I/O documenté avec exemples
 - [ ] Limites et coûts identifiés
+- [ ] Exemples de code extraits
 - [ ] Impact architecture identifié (tables, colonnes, config)
-- [ ] Clé API / credentials : statut clair (fourni, en attente, pas nécessaire)
+- [ ] Clé API : statut clair (fourni, en attente, pas nécessaire)
 
 ### Décision
 
-**Si tous les services sont documentés ET toutes les questions utilisateur ont une réponse :**
-→ Marquer le statut global comme COMPLET
-→ Générer le `.env.template` final
-→ Présenter le résumé à l'utilisateur
+**Tout documenté** → Marquer COMPLET, générer `.env.template` final
 
-**Si des éléments manquent :**
-→ Identifier précisément ce qui manque
-→ Formuler les nouvelles questions pour l'utilisateur
-→ Retour en PHASE 1 (boucle)
+**Éléments manquants** → Boucle PHASE 1 (nouvelles questions)
 
-**Si un service est BLOQUÉ (en attente de clés/infos client) :**
-→ Le marquer comme BLOQUÉ avec la raison
-→ Continuer avec les autres services
-→ Un service bloqué n'empêche PAS de passer à l'architecture (il sera implémenté en stub puis complété)
+**Service BLOQUÉ** (en attente de clés) → Marquer BLOQUÉ, continuer. Un service bloqué = stub pendant le build.
 
 ---
 
-## 🛑 CHECKPOINT — Recherche complète
+## 🛑 CHECKPOINT — Research complète
 
 **Présenter à l'utilisateur** :
 
-| Service | Doc | I/O | Limites | Impact DB | Credentials | Statut |
-|---------|-----|-----|---------|-----------|-------------|--------|
+| Service | Doc | I/O | Coût | Impact DB | Credentials | Statut |
+|---------|-----|-----|------|-----------|-------------|--------|
 | {service} | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/⏳/❌ | {PRÊT/BLOQUÉ} |
 
 - Services prêts : X/Y
 - Services bloqués : Z (liste + raison)
-- Questions restantes : N
 
-**Utilisateur** : "OK" pour passer à `/greenfield-architecture`, ou réponses aux questions restantes.
+**Utilisateur** : "OK" → `/greenfield-architecture`, ou réponses aux questions restantes.
 
 ---
 
@@ -219,5 +177,5 @@ Next Step : /greenfield-architecture
   → L'architecture consommera to-resarch.md pour :
     - Schema DB enrichi (tables liées aux services)
     - Business logic avec vrais formats I/O
-    - Services décrits avec signatures réelles (pas des placeholders)
+    - Services décrits avec signatures réelles
 ```

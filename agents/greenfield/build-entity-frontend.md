@@ -3,7 +3,7 @@ name: build-entity-frontend
 description: >
   Génère les services TypeScript, types, hooks React Query et composants
   spécifiques pour UNE entité. Agent exécutant — suit les specs.
-allowed-tools: Read, Write, Edit, Glob
+allowed-tools: Read, Write, Edit, Glob, Bash, mcp__origin-ui__search_components, mcp__origin-ui__get_component, mcp__shadcn__search_components, mcp__shadcn__get_component
 model: sonnet
 ---
 
@@ -163,7 +163,23 @@ export function useDelete{Entity}() {
 }
 ```
 
-### 5. Générer Composants spécifiques (`components/{entity}/*.tsx`)
+### 5. Installer les composants shadcn et Origin UI (si listés dans l'architecture)
+
+Depuis `frontend-architecture.md`, identifier les composants classifiés **shadcn** ou **Origin UI** pour cette entité :
+
+1. **Récupérer les détails** du composant via le MCP correspondant (`shadcn` ou `origin-ui`)
+2. **Installer** via la commande fournie par l'architecture
+3. **Adapter** si nécessaire (renommer, ajuster les props pour l'entité)
+
+```bash
+# shadcn
+cd {frontend_path} && npx shadcn@latest add {component_name}
+
+# Origin UI
+cd {frontend_path} && npx shadcn@latest add {origin_ui_component_url}
+```
+
+### 6. Générer Composants spécifiques (`components/{entity}/*.tsx`)
 
 Depuis `frontend-architecture.md` section de l'entité, créer les composants **composés** et **nouveaux** listés :
 
@@ -172,7 +188,7 @@ Depuis `frontend-architecture.md` section de l'entité, créer les composants **
 - `{Entity}Filters.tsx` — Filtres (si listé)
 - Autres composants spécifiques mentionnés dans l'architecture
 
-Utiliser les composants shadcn existants (`ui/*.tsx`) comme building blocks.
+Utiliser les composants shadcn existants (`ui/*.tsx`) ET les composants Origin UI installés comme building blocks.
 
 ## Output
 

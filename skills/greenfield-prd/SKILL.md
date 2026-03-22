@@ -1,8 +1,9 @@
 ---
 name: greenfield-prd
 description: >
-  Workflow complet de définition projet : brainstorming structuré → project brief → user stories
-  → UI tree → PRD avec requirements testables (FR/NFR). 5 phases interactives séquentielles.
+  Brainstorming conversationnel + PRD complet. 2 checkpoints humains :
+  brainstorming (crescendo de questions) et PRD (overview non-technique).
+  Stories, UI tree et brief produits silencieusement.
 allowed-tools: Read, Write
 model: opus
 user-invocable: true
@@ -11,118 +12,90 @@ disable-model-invocation: false
 
 # De l'idée au PRD
 
-Workflow interactif en 5 phases. Chaque phase produit un document qui nourrit la suivante.
-L'utilisateur valide chaque phase avant de passer à la suivante.
+2 checkpoints humains. Le reste est silencieux — les documents sont produits pour le LLM, l'humain interagit via des overviews non-techniques.
 
 ---
 
-## Phase 1 — Brainstorming
+## CHECKPOINT 1 — Brainstorming conversationnel
 
-**Objectif** : Générer les insights nécessaires au projet via une session structurée.
+**Objectif** : Comprendre l'intention de l'utilisateur en profondeur via une conversation crescendo.
 **Output** : `docs/brainstorming.md`
 **Template** : `.claude/resources/templates/docs/bmad/brainstorming-output-tmpl.yaml`
 
-### Étapes
+### Approche
 
-1. **Contexte Produit** — Poser 5 questions clés :
-   - Quel problème à résoudre ?
-   - Pour qui ? (utilisateurs cibles, personas)
-   - Quelles contraintes ? (temps, budget, technique)
-   - Quel MVP idéal ? (must-have vs nice-to-have)
-   - Type d'exploration ? (large vs focalisé)
+Conversation naturelle, pas un formulaire. Monter crescendo :
 
-2. **Génération d'Idées** — Appliquer 2-3 techniques au choix :
-   - **SCAMPER** : Substitute, Combine, Adapt, Modify, Put to other use, Eliminate, Reverse
-   - **5 Whys** : Creuser la root cause
-   - **Mind Mapping** : Connexions et structure
-   - **What If** : Scénarios exploratoires
-   - **First Principles** : Déconstruction et reconstruction
+**Niveau 1 — Vision** (questions ouvertes)
+- "C'est quoi le projet en une phrase ?"
+- "C'est pour qui ?"
+- "Quel problème ça résout ?"
 
-3. **Convergence** — Organiser en 4 catégories :
-   - Immediate Opportunities (MVP)
-   - Future Innovations (Post-MVP)
-   - Moonshots (Vision long terme)
-   - Insights & Learnings
+**Niveau 2 — Cadrage** (questions de plus en plus précises)
+- "Qu'est-ce qui existe déjà comme solution ?"
+- "C'est quoi le truc que ton app fait que personne d'autre fait ?"
+- "Si tu devais montrer UNE seule fonctionnalité à quelqu'un, ce serait laquelle ?"
 
-4. **Priorisation** — Top 3 priorities avec rationale, next steps, resources, timeline
+**Niveau 3 — Limites** (challenge)
+- "Qu'est-ce qui est absolument PAS dans le MVP ?"
+- "Quelles contraintes techniques ? (budget, temps, stack imposée)"
+- "Il y a des utilisateurs avec des rôles différents ?"
 
-**Principes** : Facilitateur (pas générateur), divergence puis convergence, pas de jugement pendant la génération.
+**Niveau 4 — Détails critiques** (précision)
+- Questions spécifiques au domaine détecté
+- Challenge les incohérences ("tu dis X mais ça implique Y, tu confirmes ?")
+- Approfondir les features mentionnées en passant
 
-**Validation** : Présenter le brainstorming → Utilisateur dit "OK" ou ajuste → Écrire `docs/brainstorming.md`
+### Techniques appliquées silencieusement
+
+Le LLM utilise SCAMPER, 5 Whys, First Principles en interne pour structurer sa compréhension. Il ne les mentionne PAS à l'utilisateur.
+
+### Validation
+
+Quand le LLM estime avoir assez de matière :
+- Présenter un **résumé structuré** en langage humain :
+  - "Ton app c'est {résumé}. Elle permet à {users} de {action principale}."
+  - "Le MVP inclut : {liste courte}"
+  - "Ce qu'on garde pour plus tard : {liste courte}"
+- L'utilisateur valide ou ajuste
+- Écrire `docs/brainstorming.md`
 
 ---
 
-## Phase 2 — Project Brief
+## Phase silencieuse — Brief + Stories + UI Tree
 
-**Objectif** : Créer un brief structuré depuis le brainstorming.
-**Input** : `docs/brainstorming.md` (optionnel, utiliser si disponible)
-**Output** : `docs/brief.md`
+**Objectif** : Produire les documents intermédiaires sans validation individuelle.
+
+Le LLM enchaîne ces 3 phases automatiquement après validation du brainstorming.
+
+### Brief (`docs/brief.md`)
+
 **Template** : `.claude/resources/templates/docs/bmad/project-brief-tmpl.yaml`
 
-### Sections à compléter (interactif)
+Remplir les 10 sections depuis le brainstorming :
+1. Executive Summary
+2. Problem Statement
+3. Proposed Solution
+4. Target Users
+5. Goals & Metrics
+6. MVP Scope
+7. Post-MVP Vision
+8. Technical Considerations
+9. Constraints & Assumptions
+10. Risks & Open Questions
 
-Pour chaque section, poser des questions ciblées, proposer un draft, valider avec l'utilisateur.
+### User Stories (intégrées dans le PRD)
 
-1. **Executive Summary** — 2-3 phrases résumant le projet
-2. **Problem Statement** — Problème, impact, solution actuelle
-3. **Proposed Solution** — Description de la solution
-4. **Target Users** — Personas, rôles, besoins
-5. **Goals & Metrics** — Objectifs mesurables, KPIs
-6. **MVP Scope** — Core features (must-have) vs nice-to-have
-7. **Post-MVP Vision** — Phase 2-3, moonshots
-8. **Technical Considerations** — Stack, contraintes techniques
-9. **Constraints & Assumptions** — Budget, temps, hypothèses
-10. **Risks & Open Questions** — Risques identifiés, questions ouvertes
+Organiser par **parcours utilisateur complet** (pas par feature) :
+- Chaque rôle a son bloc
+- Numérotation séquentielle au sein de chaque parcours
+- Format : "{Rôle} fait {action} → {résultat visible}"
+- Ordre chronologique réel
+- Couvrir cas nominaux + transitions
 
-### Mapping depuis brainstorming
+### UI Tree (intégré dans le PRD)
 
-| Brainstorming Section | Brief Section |
-|----------------------|---------------|
-| Top 3 Priorities | MVP Scope |
-| Immediate Opportunities | MVP Scope (Must-have) |
-| Future Innovations + Moonshots | Post-MVP Vision |
-| Insights & Learnings | Problem Statement |
-| Contexte (utilisateurs) | Target Users |
-| Contexte (contraintes) | Constraints & Assumptions |
-
-**Validation** : Présenter le brief complet → Utilisateur dit "OK" ou ajuste → Écrire `docs/brief.md`
-
----
-
-## Phase 3 — User Stories
-
-**Objectif** : Décrire les parcours complets de chaque rôle, étape par étape, pour couvrir 100% des interactions de l'interface.
-**Input** : `docs/brief.md` (obligatoire — si absent, STOP et recommander Phase 2)
-**Output** : Intégré dans `docs/prd.md` (section "User Stories")
-
-### Structure
-
-Organiser les stories par **parcours utilisateur complet** (pas par feature isolée). Chaque rôle a son bloc :
-
-1. **Parcours Admin** — Setup initial, onboarding d'un client, suivi quotidien, gestion contenu
-2. **Parcours Coach** — Première connexion, prise en charge client, accompagnement quotidien, reprise d'un client réassigné
-3. **Parcours Client** — Onboarding, utilisation quotidienne, avancement dans le parcours
-
-### Règles de rédaction
-
-- Chaque story est numérotée séquentiellement (1, 2, 3...) au sein de son parcours
-- Formuler en action concrète : "{Rôle} fait {action} → {résultat visible}"
-- Suivre l'ordre chronologique réel (ce que l'utilisateur fait en premier, puis en deuxième, etc.)
-- Couvrir les cas nominaux ET les cas de transition (ex: réassignation de coach, désactivation)
-- Chaque story doit impliquer un élément d'interface identifiable (page, bouton, modale, vue)
-
-**Validation** : Présenter les stories → Utilisateur valide la couverture → Conserver pour intégration dans le PRD
-
----
-
-## Phase 4 — UI Tree (Arborescence Interface)
-
-**Objectif** : Cartographier l'intégralité de l'interface sous forme d'arborescence hiérarchique : pages → sections → vues → boutons → modales → contenu.
-**Input** : User Stories (Phase 3) + `docs/brief.md`
-**Output** : Intégré dans `docs/prd.md` (section "UI Tree")
-
-### Structure
-
+Arborescence complète de l'interface :
 ```
 App
 ├── /route
@@ -133,82 +106,61 @@ App
 │   │       └── Résultat de l'action
 ```
 
-### Règles
-
-- **Une entrée par page/route** avec toutes ses sections imbriquées
-- Chaque élément interactif (bouton, lien, filtre) doit indiquer **ce qu'il déclenche** (modale, navigation, action)
-- Chaque modale doit lister ses **champs, boutons et comportements**
-- Chaque tableau/liste doit lister ses **colonnes/champs visibles et actions par ligne**
-- Organiser par espace utilisateur (layout global → espace client → espace coach → espace admin)
-- Préciser les éléments **hors scope POC** directement dans l'arbre (ex: "placeholder, non fonctionnel")
-- L'arbre doit être suffisamment détaillé pour qu'un développeur frontend puisse construire chaque page sans ambiguïté
-
-**Validation** : Présenter l'arbre → Utilisateur valide la couverture → Conserver pour intégration dans le PRD
+Chaque élément interactif indique ce qu'il déclenche. Chaque modale liste ses champs et boutons. Assez détaillé pour qu'un développeur construise chaque page.
 
 ---
 
-## Phase 5 — PRD (Product Requirements Document)
+## CHECKPOINT 2 — PRD overview
 
-**Objectif** : Transformer le brief, les user stories et l'UI tree en PRD complet avec requirements numérotés et testables.
-**Input** : `docs/brief.md` + User Stories (Phase 3) + UI Tree (Phase 4)
-**Output** : `docs/prd.md`
-**Template** : `.claude/resources/templates/docs/bmad/prd-tmpl.yaml`
+**Objectif** : Présenter le PRD de manière non-technique pour validation finale.
+**Output** : `docs/prd.md`, `docs/for-later.md`
+**Template PRD** : `.claude/resources/templates/docs/bmad/prd-tmpl.yaml`
+**Template for-later** : `.claude/resources/templates/docs/for-later.md`
 
-### Sections
+### Le document PRD (complet, technique)
 
-1. **Goals & Background** — Contexte et objectifs (depuis brief)
+Contient toutes les sections habituelles :
+1. Goals & Background
+2. User Stories (depuis phase silencieuse)
+3. UI Tree (depuis phase silencieuse)
+4. Functional Requirements (FR1-FRN) — numérotés, testables, assignés, priorisés, traçables
+5. Non-Functional Requirements (NFR1-NFRN)
+6. User Interface Design Goals
 
-2. **User Stories** — Parcours complets par rôle (depuis Phase 3)
+### La présentation à l'utilisateur (non-technique)
 
-3. **UI Tree** — Arborescence complète de l'interface (depuis Phase 4)
+**Ne PAS présenter le doc brut.** Présenter un overview :
 
-4. **Functional Requirements (FR1-FRN)** — Chaque FR doit être :
-   - Numéroté (FR1, FR2, ...)
-   - Testable (critère de validation clair)
-   - Assigné à une entité métier (User, Property, Booking...)
-   - Priorisé (Must-have / Should-have / Nice-to-have)
-   - Traçable vers une ou plusieurs user stories
+> "Ton app permet à {users} de {actions principales}."
+>
+> **Ce qu'elle fait (MVP) :**
+> - {Feature 1} — {description en 1 ligne}
+> - {Feature 2} — {description en 1 ligne}
+> - ...
+>
+> **Les rôles :**
+> - {Role 1} : peut {actions résumées}
+> - {Role 2} : peut {actions résumées}
+>
+> **Les pages principales :**
+> - {Page 1} : {ce qu'on y fait}
+> - {Page 2} : {ce qu'on y fait}
+>
+> **Ce qu'on garde pour plus tard :**
+> - {Item 1}, {Item 2}, ...
+>
+> "Le PRD détaillé est dans `docs/prd.md` si tu veux checker. Sinon, on continue ?"
 
-5. **Non-Functional Requirements (NFR1-NFRN)** — Performance, sécurité, scalabilité
+**L'utilisateur** : "OK" ou feedbacks → ajuster → écrire `docs/prd.md` + `docs/for-later.md`
 
-6. **User Interface Design Goals** — Principes UI/UX, responsive, accessibilité
+### For Later (automatique)
 
-### Règles de rédaction FR
-
-- Un FR = une action utilisateur (ex: "L'utilisateur peut créer une propriété")
-- Pas de termes vagues ("rapidement", "facilement")
-- Inclure le rôle (User, Admin, Guest)
-- Inclure les critères de validation
-- Référencer les user stories couvertes (ex: "Stories 18-21")
-
-**Validation** : Présenter le PRD → Utilisateur valide les FR/NFR → Écrire `docs/prd.md`
-
----
-
-## Phase 6 — For Later (automatique)
-
-**Objectif** : Déverser les éléments post-MVP identifiés pendant les phases 1-5 dans `docs/for-later.md`.
-**Template** : `.claude/resources/templates/docs/for-later.md`
-**Output** : `docs/for-later.md`
-
-### Sources automatiques
-
-| Source | Éléments à extraire |
-|--------|-------------------|
-| Phase 1 (Brainstorming) | Future Innovations + Moonshots |
-| Phase 2 (Brief) | Post-MVP Vision + Nice-to-have |
-| Phase 3 (User Stories) | Stories identifiées comme hors scope POC |
-| Phase 4 (UI Tree) | Éléments marqués "placeholder" ou "non fonctionnel dans le POC" |
-| Phase 5 (PRD) | FR marqués Should-have / Nice-to-have (hors MVP) |
-
-### Process
-
-1. Collecter tous les éléments identifiés comme post-MVP pendant les 5 phases
-2. Pour chaque élément, rédiger selon le template : nom, description, pourquoi reporté, dépendances, priorité
-3. Si `docs/for-later.md` existe déjà → ajouter les nouveaux éléments sans supprimer les existants
-4. Si n'existe pas → créer depuis le template
-
-**Pas de validation nécessaire** — cette phase est automatique après validation du PRD.
+Collecter tous les éléments post-MVP identifiés :
+- Brainstorming : Future Innovations + Moonshots
+- Brief : Post-MVP Vision + Nice-to-have
+- Stories : hors scope POC
+- UI Tree : placeholders
+- PRD : FR Should-have / Nice-to-have
 
 ---
 
@@ -216,9 +168,11 @@ App
 
 ```
 Livrables :
+- docs/brainstorming.md
+- docs/brief.md
 - docs/prd.md (inclut User Stories + UI Tree + FR/NFR)
-- docs/for-later.md (post-MVP, peuplé automatiquement)
+- docs/for-later.md (post-MVP)
 
-Next Step : /greenfield-research
-  → Identifie et documente toutes les dépendances externes avant l'architecture
+Next Step : /greenfield-jobs
+  → Définit les jobs de l'application et les choix de services
 ```

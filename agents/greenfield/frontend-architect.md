@@ -3,7 +3,7 @@ name: frontend-architect
 description: >
   Génère l'architecture frontend complète (layout, pages, composants, endpoints)
   dans un fichier unique. Lit les best practices frontend et analyse les composants UI disponibles.
-allowed-tools: Read, Write, Glob
+allowed-tools: Read, Write, Glob, mcp__origin-ui__search_components, mcp__origin-ui__get_component, mcp__origin-ui__list_categories, mcp__shadcn__search_components, mcp__shadcn__get_component, mcp__shadcn__list_components
 model: opus
 ---
 
@@ -63,14 +63,42 @@ Page: PropertyList (/properties)
 └── EmptyState [nouveau]
 ```
 
-### 5. Classifier chaque composant
+### 5. Chercher des composants existants AVANT de créer
+
+**OBLIGATOIRE** : Avant de classifier un composant comme "Composé" ou "Nouveau", chercher dans les 2 registres de composants via MCP :
+
+#### 5a. Chercher dans shadcn (MCP `shadcn`)
+
+1. **Lister les composants** disponibles via `list_components`
+2. **Chercher par nom/fonction** via `search_components`
+3. **Obtenir les détails** via `get_component`
+
+shadcn = composants de base (Button, Card, Dialog, Table, etc.) + composants plus avancés (data-table, chart, etc.)
+
+#### 5b. Chercher dans Origin UI (MCP `origin-ui`)
+
+1. **Lister les catégories** disponibles via `list_categories`
+2. **Chercher par nom/fonction** via `search_components` (ex: "data table", "pricing card", "file upload", "stats")
+3. **Obtenir les détails** d'un composant pertinent via `get_component`
+
+Origin UI = 537 composants prêts à l'emploi, souvent des assemblages shadcn plus élaborés (cards, forms, stats, layouts, etc.)
+
+#### Ordre de priorité
+
+1. **shadcn** : composant de base qui fait le job tel quel
+2. **Origin UI** : composant plus riche/composé qui correspond au besoin
+3. **Composé** : assemblage manuel de composants existants (rien trouvé dans les registres)
+4. **Nouveau** : custom uniquement si rien n'existe
+
+### 6. Classifier chaque composant
 
 | Type | Définition | Source |
 |------|-----------|--------|
 | **Existant** | Composant UI disponible tel quel | `ui/{name}.tsx` |
-| **Composé** | Assemblage de composants existants | Décomposer en sous-composants |
+| **Origin UI** | Composant Origin UI à installer | `npx shadcn@latest add {origin_ui_url}` — mentionner le nom et la catégorie |
+| **Composé** | Assemblage de composants existants (AUCUN Origin UI trouvé) | Décomposer en sous-composants |
 | **Référence** | Composant inspiré d'un projet existant | `templates/projects/{project}/` — mentionner le chemin source |
-| **Nouveau** | À créer | `npx shadcn@latest add {name}` ou custom |
+| **Nouveau** | À créer (AUCUN Origin UI ni shadcn trouvé) | Custom uniquement |
 
 ### 6. Mapper les endpoints API
 
@@ -164,14 +192,20 @@ Préciser : Method, Query/Body params, Trigger, Success behavior, Error behavior
 ### Existants (ui/*.tsx)
 {liste avec usage}
 
-### Composés
+### shadcn (à installer via MCP ou CLI)
+{liste avec nom, commande d'installation}
+
+### Origin UI (à installer)
+{liste avec nom, catégorie, commande d'installation}
+
+### Composés (rien trouvé dans shadcn/Origin UI)
 {liste avec décomposition}
 
 ### Référence (inspirés de projets existants)
 {liste avec projet source et chemin}
 
-### Nouveaux
-{liste avec source (shadcn/custom)}
+### Nouveaux (aucun existant trouvé)
+{liste avec justification pourquoi custom}
 
 ## Récapitulatif Endpoints
 
