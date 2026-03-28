@@ -33,6 +33,8 @@ L'approche est **Intent-First, Jobs-First** : l'humain partage son intention, le
 | `/tools-clarify` | Analyse une demande, identifie les zones de flou |
 | `/tools-validate` | Valide un markdown de clarification |
 | `/tools-frontend-debugger` | Debug itératif frontend |
+| `/sync` | Mise a jour du framework (git pull + detection changements config) |
+| `/vps-monitor` | Monitoring et nettoyage du VPS (RAM, CPU, containers, processes) |
 
 ### Référence (auto-activé)
 
@@ -150,6 +152,16 @@ Les best practices et templates sont dans `.claude/resources/` :
    DB: CREATE DATABASE sur postgres-unified
    Deploy séquentiel (1 par serveur) + vérification logs
 ```
+
+## Auto-check au demarrage
+
+A chaque debut de session (premiere interaction avec l'utilisateur) :
+1. Lancer `/sync` — verifier les mises a jour du framework (git pull + detection changements config)
+2. Lancer `/vps-monitor` — verifier la sante du VPS (RAM, CPU, containers, processes)
+
+- Si tout est OK : resume en 2-3 lignes maximum, puis passer a la demande de l'utilisateur
+- Si une anomalie est detectee : alerter l'utilisateur clairement et proposer une correction avant de continuer
+- Si le repo n'est pas un git repo (pas de `.git`) : ignorer le sync silencieusement
 
 ## Détection de Frustration Utilisateur
 
