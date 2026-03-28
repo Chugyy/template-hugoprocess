@@ -261,6 +261,26 @@ def setup_backend(backend_path, template_path, app_name, db_name, create_admin=F
         shutil.copytree(template_path, backend_path)
         print_success("Backend template copied")
 
+    # 1b. Clean template-specific files (auth, users, etc.)
+    print("\n🧹 Cleaning template-specific files...")
+    template_files_to_remove = [
+        "app/api/routes/auth.py",
+        "app/api/routes/users.py",
+        "app/api/models/users.py",
+        "app/database/crud/users.py",
+        "app/core/utils/auth.py",
+    ]
+    removed = 0
+    for rel_path in template_files_to_remove:
+        f = backend_path / rel_path
+        if f.exists():
+            f.unlink()
+            removed += 1
+    if removed:
+        print_success(f"Removed {removed} template-specific files")
+    else:
+        print_warning("No template files to clean")
+
     # 2. Create virtual environment
     print("\n🐍 Creating virtual environment...")
     venv_path = backend_path / ".venv"
@@ -401,7 +421,7 @@ def setup_frontend(frontend_path, template_path, app_name):
     print("\n⚙️  Creating .env.local...")
     env_local = frontend_path / ".env.local"
     with open(env_local, 'w') as f:
-        f.write("NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1\n")
+        f.write("NEXT_PUBLIC_API_URL=http://localhost:8000\n")
     print_success(".env.local created")
 
     # 4. Update layout.tsx metadata

@@ -2,288 +2,130 @@
 name: greenfield-build
 description: >
   Génère le code complet (backend + frontend) depuis l'architecture.
-  Build par couches avec tests progressifs : services → CRUD → utils → jobs → routes → frontend.
+  Backend : scripts de génération (DB, CRUD, routes, assembly) + agents (services, jobs, utils).
+  Frontend : agents (composants par entité + shell).
   Chaque couche est testée avant de passer à la suivante.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, Task
 model: opus
 user-invocable: true
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
-# De l'architecture au code — Build par couches
+> **Convention projet** : Tous les chemins `docs/` et `dev/` sont relatifs au dossier projet actif (ex: `./tests-note/docs/prd.md`). Le dossier projet est communiqué par l'utilisateur ou le workflow parent.
 
-Chaque couche est codée, testée et validée avant de passer à la suivante. Si erreur majeure sur une entité → l'agent stoppe cette entité, log l'erreur, passe aux autres. On revient dessus après.
+# De l'architecture au code — Build hybride (scripts + agents)
+
+**Principe** : le backend formulaire (DB, CRUD, routes, assembly) est généré par des scripts Python depuis les JSON configs produits par les agents d'architecture. Les couches complexes (services, jobs, utils, frontend) restent agents.
 
 ## Prérequis
 
-→ Vérifier existence de :
-- `docs/architecture/backend/schema.md`
-- `docs/architecture/backend/api/` — Au moins 1 fichier `{entity}.md`
-- `docs/architecture/backend/business-logic/` — Au moins 1 fichier `{entity}.md`
+Vérifier existence de :
+- `docs/architecture/configs/` — Doit contenir au minimum `db.json`, `assembly.json`, et au moins un `crud-*.json` + `routes-*.json`
 - `docs/architecture/frontend/frontend-architecture.md`
 
-→ Lister les entités depuis `docs/architecture/backend/api/*.md`
-→ Lister les services externes depuis `docs/to-resarch.md` (si existe)
+Si les JSON configs sont absents → STOP → `/greenfield-architecture`
 
 ---
 
-## Phase 0 — Setup infrastructure
+## Prérequis — Clés API
 
-### 0.1 — Squelettes
+> **REGLE** : Avant de lancer le build, vérifier dans `docs/to-research.md` si des services externes nécessitent des clés API. Si des credentials sont EN ATTENTE, DEMANDER explicitement à l'utilisateur de les fournir : "Pour builder et tester les services, j'ai besoin de tes clés API : {liste}. Tu peux me les donner maintenant ?"
+> Les clés seront écrites dans le `.env` du backend.
 
-**Script** : `.claude/resources/scripts/setup-infrastructure.py`
+---
+
+## Phase 0 — Setup infrastructure (script)
 
 ```bash
-python .claude/resources/scripts/setup-infrastructure.py --app-name {app_name} --create-admin
+python .claude/resources/scripts/setup-infrastructure.py \
+  --app-name {app_name} \
+  --backend-path {project}/dev/backend \
+  --frontend-path {project}/dev/frontend
 ```
-
-**Si le script n'existe pas** : copier manuellement depuis les templates :
-- `.claude/resources/templates/code/backend/` → `dev/backend/`
-- `.claude/resources/templates/code/frontend/` → `dev/frontend/`
-
-### 0.2 — Configuration .env complète
-
-**OBLIGATOIRE** avant toute génération de code.
-
-1. **Lire `.env` à la racine** (s'il existe) → clés API déjà fournies
-2. **Lire `docs/to-research.md`** → services externes et variables
-3. **Compléter `dev/backend/config/.env`** avec TOUTES les variables :
-   - Application (APP_NAME, DEBUG, HOST, PORT, PRODUCTION)
-   - Database (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
-   - JWT (JWT_SECRET_KEY, JWT_ALGORITHM, JWT_EXPIRATION_HOURS, JWT_REFRESH_EXPIRATION_DAYS)
-   - SMTP (depuis `.env` racine si fourni)
-   - Clés API de chaque service externe
-   - Frontend URL pour CORS
-4. **Compléter `dev/backend/config/.env.example`** — même structure, sans secrets
-5. **Mettre à jour `dev/backend/config/config.py`** — `settings.{variable}` pour CHAQUE variable
-6. **Compléter `dev/frontend/.env.local`** — `NEXT_PUBLIC_API_URL=http://localhost:8000/api`
-7. **Créer `docs/env-reference.md`** — référence de toutes les variables avec statut
-
-**Règle critique** : `from config.config import settings` — JAMAIS `os.environ` directement.
 
 ---
 
-## Phase 1 — Database (séquentiel, 1 agent)
+## Phase 1 — Build backend complet (scripts, une commande)
 
-**Agent** : `generate-database` (Sonnet)
-**Input** :
-- `docs/architecture/backend/schema.md`
-- `.claude/resources/templates/code/backend/app/database/`
-**Output** :
-- `dev/backend/app/database/models.py` (SQLAlchemy, documentation)
-- `dev/backend/app/database/migrations/001_initial_schema.sql`
+```python
+import sys
+sys.path.insert(0, '.claude/resources/scripts')
+from generators import build_backend_from_configs
+from pathlib import Path
 
-```
-Agent(generate-database, prompt="schema_path: docs/architecture/backend/schema.md, backend_path: dev/backend")
-```
-
-**Attendre la fin avant Phase 2.**
-
----
-
-## Phase 2 — Services externes (PARALLÈLE, 1 agent Opus par service)
-
-**Si `docs/to-resarch.md` n'existe pas ou aucun service externe** : SKIP → Phase 3.
-
-**Agent** : `build-service` (Opus) × N services
-**Input par agent** :
-- `docs/to-resarch.md` (section du service)
-- `docs/architecture/backend/business-logic/*.md` (contexte d'appel)
-- `docs/architecture/backend/schema.md`
-- Code backend existant
-**Output par agent** :
-- `dev/backend/app/core/services/{service_name}.py` — wrapper réel
-- `dev/backend/tests/test_services/test_{service_name}.py` — tests
-- `dev/backend/reports/service-{service_name}.md` — rapport
-
-```
-Pour chaque service externe :
-  Agent(build-service, prompt="service_name: {service}, to-resarch_path: docs/to-resarch.md, architecture_path: docs/architecture/backend, backend_path: dev/backend. IMPORTANT: lire dev/backend/config/config.py EN PREMIER.")
+build_backend_from_configs(
+    configs_path=Path('{project}/docs/architecture/configs'),
+    backend_path=Path('{project}/dev/backend')
+)
 ```
 
-### Post-services : installation + validation
+Cela exécute dans l'ordre :
+1. `generate_config()` — `.env` + `config.py` depuis `assembly.json`
+2. `generate_db()` — `models.py` + `001_initial_schema.sql` depuis `db.json`
+3. `generate_crud()` — `crud/{entity}.py` + tests depuis chaque `crud-*.json`
+4. `generate_routes()` — `models/{entity}.py` + `routes/{entity}.py` + tests depuis chaque `routes-*.json`
+5. `generate_job_skeletons()` — `jobs/{entity}.py` squelettes depuis chaque `jobs-*.json`
+6. `generate_service_skeletons()` — `services/{name}.py` squelettes depuis `services.json`
+7. `generate_assembly()` — `main.py`, `models/__init__.py`, `conftest.py`, `pyproject.toml`
+
+### Post-scripts : migration + validation
 
 ```bash
-cd dev/backend && pip install -r requirements.txt
-cd dev/backend && python -m pytest tests/test_services/ -v 2>&1 | head -80
+cd {project}/dev/backend
+psql -U {db_user} -d {db_name} -f app/database/migrations/001_initial_schema.sql
+source .venv/bin/activate && python -m pytest -v 2>&1 | head -100
 ```
 
-**Si tests échouent** : auto-fix (max 3 tentatives). Si échec persistant → noter et continuer.
-
-**Mettre à jour `.env`** avec les variables découvertes pendant l'implémentation des services.
+**Si tests passent** → le backend formulaire est complet. Passer à la phase 2.
+**Si erreurs** → auto-fix (max 3 tentatives).
 
 ---
 
-## Phase 3 — CRUD par entité (PARALLÈLE, N agents Sonnet)
+## Phase 2 — Build backend logique (agents, seulement si nécessaire)
 
-**Agent** : `build-crud` (Sonnet) × N entités
-**Input par agent** :
-- `docs/architecture/backend/business-logic/{entity}.md` (section CRUD)
-- `docs/architecture/backend/schema.md` (section entité)
-- `.claude/resources/templates/code/backend/`
-**Output par agent** :
-- `dev/backend/app/database/crud/{entity}.py`
-- `dev/backend/tests/test_crud/test_{entity}.py`
+### Services (si squelettes existent)
 
 ```
-Pour chaque entité :
-  Agent(build-crud, prompt="entity: {entity}, architecture_path: docs/architecture/backend, backend_path: dev/backend. Lire config.py EN PREMIER.")
+Pour chaque service dans services/:
+  Agent(build-service, prompt="service_name: {service}, backend_path: dev/backend, research_path: docs/research/{service}.md. Le squelette existe — remplir l'implémentation réelle. Lire config.py EN PREMIER.")
 ```
 
-### Post-CRUD : validation
-
-```bash
-cd dev/backend && python -m pytest tests/test_crud/ -v 2>&1 | head -80
-```
-
-**Si erreur sur une entité** : noter l'entité en erreur, continuer avec les autres. Les entités en erreur seront exclues des phases suivantes jusqu'à fix.
-
----
-
-## Phase 4 — Utils par entité (PARALLÈLE, N agents Sonnet)
-
-**Agent** : `build-utils` (Sonnet) × N entités
-**Input par agent** :
-- `docs/architecture/backend/business-logic/{entity}.md` (section Utils)
-- Code CRUD existant (pour connaître les types)
-**Output par agent** :
-- `dev/backend/app/core/utils/{entity}.py`
-- `dev/backend/tests/test_utils/test_{entity}.py`
+### Jobs (si squelettes existent)
 
 ```
-Pour chaque entité (sauf celles en erreur) :
+Pour chaque entité ayant un jobs/{entity}.py:
+  Agent(build-jobs, prompt="entity: {entity}, backend_path: dev/backend. Le squelette existe dans jobs/{entity}.py — remplir les fonctions. Les jobs appellent les vrais CRUD, services et utils — PAS de mock. Lire le code existant AVANT.")
+```
+
+### Utils (agent, si mentionnés dans business-logic)
+
+```
+Pour chaque entité ayant une section Utils:
   Agent(build-utils, prompt="entity: {entity}, architecture_path: docs/architecture/backend, backend_path: dev/backend")
 ```
 
-### Post-Utils : validation
+### Post-agents : validation
 
 ```bash
-cd dev/backend && python -m pytest tests/test_utils/ -v 2>&1 | head -80
-```
-
-**Si entité sans Utils** dans la business-logic → SKIP cette entité pour cette phase.
-
----
-
-## Phase 5 — Jobs par entité (PARALLÈLE, N agents Sonnet)
-
-**Agent** : `build-jobs` (Sonnet) × N entités
-**Input par agent** :
-- `docs/architecture/backend/business-logic/{entity}.md` (section Jobs)
-- Code existant : `crud/{entity}.py`, `services/*.py`, `utils/{entity}.py`
-**Output par agent** :
-- `dev/backend/app/core/jobs/{entity}.py`
-- `dev/backend/tests/test_jobs/test_{entity}.py` — tests E2E (vrais services + CRUD + utils)
-
-```
-Pour chaque entité (sauf celles en erreur) :
-  Agent(build-jobs, prompt="entity: {entity}, architecture_path: docs/architecture/backend, backend_path: dev/backend. Les jobs appellent les vrais CRUD, services et utils — PAS de mock. Lire le code existant dans crud/, services/, utils/ AVANT de coder.")
-```
-
-### Post-Jobs : validation E2E
-
-```bash
-cd dev/backend && python -m pytest tests/test_jobs/ -v 2>&1 | head -80
-```
-
-**Si entité sans Jobs** → SKIP.
-
----
-
-## Phase 6 — Routes + Models Pydantic par entité (PARALLÈLE, N agents Sonnet)
-
-**Agent** : `build-routes` (Sonnet) × N entités
-**Input par agent** :
-- `docs/architecture/backend/api/{entity}.md`
-- `docs/architecture/backend/business-logic/{entity}.md`
-- Code existant : `jobs/{entity}.py`, `crud/{entity}.py`
-**Output par agent** :
-- `dev/backend/app/api/models/{entity}.py` (Pydantic)
-- `dev/backend/app/api/routes/{entity}.py` (FastAPI)
-- `dev/backend/tests/test_routes/test_{entity}.py`
-
-```
-Pour chaque entité ayant un fichier api/{entity}.md :
-  Agent(build-routes, prompt="entity: {entity}, architecture_path: docs/architecture/backend, backend_path: dev/backend. Les routes appellent les jobs (si existent) ou CRUD directement. Lire le code existant AVANT de coder. Lire config.py EN PREMIER.")
-```
-
-### Post-Routes : validation
-
-```bash
-cd dev/backend && python -m pytest tests/test_routes/ -v 2>&1 | head -80
+cd dev/backend && source .venv/bin/activate && python -m pytest -v 2>&1 | head -100
 ```
 
 ---
 
-## Phase 7 — Réconciliation + Assemblage
+## Phase 3 — Frontend par entité (agents)
 
-### 7.1 Réconciliation services (si rapports existent)
-
-**Si des fichiers `dev/backend/reports/service-*.md` existent :**
-
-**Agent** : `reconcile-services` (Opus)
-**Input** : Tous les rapports + code backend
-**Output** :
-- `dev/backend/app/database/migrations/002_services_integration.sql`
-- Mises à jour models.py, routes, jobs, requirements.txt
-- `dev/backend/reports/reconciliation-summary.md`
+**Agent** : `build-entity-frontend` (Sonnet) par entité
 
 ```
-Agent(reconcile-services, prompt="backend_path: dev/backend, architecture_path: docs/architecture/backend")
-```
-
-### 7.2 Assemblage (action directe)
-
-Générer les fichiers partagés :
-- `dev/backend/app/api/routes/__init__.py` — importe tous les routers
-- `dev/backend/app/main.py` — enregistre les routers FastAPI
-
-### 7.3 Validation backend complète
-
-```bash
-cd dev/backend && pip install -r requirements.txt
-cd dev/backend && python -m pytest -v 2>&1 | head -100
-```
-
-**Si erreurs** : auto-fix (max 3 tentatives par erreur).
-
----
-
-## Phase 8 — Frontend par entité (PARALLÈLE, N agents Sonnet)
-
-**Agent** : `build-entity-frontend` (Sonnet) × N entités
-**Input par agent** :
-- `docs/architecture/backend/api/{entity}.md`
-- `docs/architecture/frontend/frontend-architecture.md` (section entité)
-- `.claude/resources/templates/code/frontend/`
-- `docs/mockups/` (si existent — utiliser comme référence visuelle)
-**Output par agent** :
-- `dev/frontend/src/services/{entity}/api.ts`
-- `dev/frontend/src/services/{entity}/types.ts`
-- `dev/frontend/src/hooks/use-{entity}.ts`
-- `dev/frontend/src/components/{entity}/*.tsx`
-
-```
-Pour chaque entité :
+Pour chaque entité:
   Agent(build-entity-frontend, prompt="entity: {entity}, api_path: docs/architecture/backend/api/{entity}.md, frontend_arch_path: docs/architecture/frontend/frontend-architecture.md, frontend_path: dev/frontend, mockups_path: docs/mockups")
 ```
 
 ---
 
-## Phase 9 — Frontend global (séquentiel, 1 agent)
+## Phase 4 — Frontend global (agent)
 
 **Agent** : `build-frontend-shell` (Sonnet)
-**Input** :
-- `docs/architecture/frontend/frontend-architecture.md`
-- `dev/frontend/src/services/` + `dev/frontend/src/components/`
-- `.claude/resources/templates/code/frontend/`
-- `docs/mockups/` (si existent)
-**Output** :
-- `dev/frontend/src/app/layout.tsx`
-- `dev/frontend/src/app/page.tsx`
-- Pages par entité
-- Composants layout (sidebar, header, navigation)
-- `dev/frontend/src/lib/providers.tsx`
 
 ```
 Agent(build-frontend-shell, prompt="frontend_arch_path: docs/architecture/frontend/frontend-architecture.md, frontend_path: dev/frontend, mockups_path: docs/mockups")
@@ -291,56 +133,46 @@ Agent(build-frontend-shell, prompt="frontend_arch_path: docs/architecture/fronte
 
 ---
 
-## Phase 10 — Validation globale
+## Phase 5 — Validation globale
 
-### 10.1 Backend
-
+### Backend
 ```bash
-cd dev/backend && python -m pytest -v 2>&1 | head -100
+cd dev/backend && source .venv/bin/activate && python -m pytest -v 2>&1 | head -100
 ```
 
-### 10.2 Frontend
-
+### Frontend
 ```bash
 cd dev/frontend && npm install && npm run build 2>&1 | head -50
 ```
 
-**Si erreurs** : auto-fix (max 3 tentatives par erreur). Si échec → noter dans le rapport.
-
-### 10.3 Seed data
-
-Seed TOUTES les entités avec des données réalistes (pas juste les users).
-
-```bash
-cd dev/backend && python seed.py
-```
+**Si erreurs** : auto-fix (max 3 tentatives).
 
 ---
 
-## 🛑 CHECKPOINT — C'est prêt
-
-**Présenter à l'utilisateur** :
+## CHECKPOINT — C'est prêt
 
 ```
-✅ Build terminé
+Build terminé
 
-Backend :
-- Services : X testés ✅, Y stubs restants
-- CRUD : X/Y entités ✅
-- Utils : X/Y entités ✅
-- Jobs : X/Y entités ✅ (tests E2E)
-- Routes : X endpoints ✅
+Backend (scripts) :
+- Config : .env + config.py
+- DB : models.py + migration
+- CRUD : X/Y entités + tests
+- Routes : X endpoints + tests
+- Assembly : main.py + __init__.py
 - Tests : X passed, Y failed
 
-Frontend :
-- Pages : X générées
-- Composants : X par entité + Y partagés
-- Build : ✅/❌
+Backend (agents) :
+- Services : X implémentés
+- Jobs : X implémentés
+- Utils : X implémentés
 
-Entités en erreur (si any) :
-- {entité} : {erreur résumée} — à fixer manuellement
+Frontend (agents) :
+- Composants : X par entité
+- Shell : layout + pages
+- Build : OK/KO
 
-L'application est prête. Lance le backend et le frontend pour tester.
+L'application est prête.
 ```
 
 ---
@@ -348,9 +180,8 @@ L'application est prête. Lance le backend et le frontend pour tester.
 ## Règles transversales
 
 - **Config** : TOUJOURS `from config.config import settings`, JAMAIS `os.environ`
-- **Trailing slash** : `@router.post("")` JAMAIS `"/"` (redirect_slashes=False)
-- **get_current_user** : retourne `SimpleNamespace` (accès par attribut)
-- **Fichiers partagés** : aucun agent ne touche `models.py`, `main.py`, `__init__.py` sauf en phase 7
-- **Erreur majeure** : l'agent stoppe l'entité, log l'erreur, passe aux autres
-- **Tests** : chaque couche est testée avant de passer à la suivante
-- **Services** : les agents build-jobs utilisent les VRAIS services (pas des mocks), sauf services BLOQUÉS
+- **Trailing slash** : `@router.post("")` JAMAIS `"/"`
+- **Scripts d'abord** : utiliser `build_backend_from_configs()` pour tout le formulaire
+- **JSON configs** : stockés dans `docs/architecture/configs/`
+- **Tests** : chaque phase est testée avant de passer à la suivante
+- **Services** : les agents build-jobs utilisent les VRAIS services (pas des mocks)

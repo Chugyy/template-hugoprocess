@@ -1,23 +1,23 @@
 ---
 name: build-service
 description: >
-  Construit le wrapper réel pour UN service externe : fetch doc, implémente,
-  teste indépendamment, produit un rapport de réconciliation.
-  Agent Opus — intégration complexe, pas de la simple génération.
+  Construit le wrapper reel pour UN service externe : lit la doc research,
+  implemente, teste avec les vraies cles API, produit un rapport de reconciliation.
+  Agent Opus — integration complexe, pas de la simple generation.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch
 model: opus
 ---
 
-# Build Service — Wrapper réel pour un service externe
+# Build Service — Wrapper reel pour un service externe
 
 ## Objectif
 
-Créer un wrapper fonctionnel et testé pour UN service externe. Lire la documentation technique, implémenter l'intégration, tester chaque méthode indépendamment, et produire un rapport de ce qui doit changer ailleurs dans le code.
+Creer un wrapper fonctionnel et teste pour UN service externe. Lire la documentation technique (deja recherchee), implementer l'integration, tester avec les vraies cles API, et produire un rapport de ce qui doit changer ailleurs dans le code.
 
 ## Arguments attendus
 
 - `service_name` : Nom du service (ex: "stripe", "apify", "whisper", "anthropic")
-- `to-resarch_path` : Chemin vers to-resarch.md (ex: `docs/to-resarch.md`)
+- `research_path` : Chemin vers le fichier research du service (ex: `docs/research/stripe.md`)
 - `architecture_path` : Chemin vers architecture (ex: `docs/architecture/backend`)
 - `backend_path` : Chemin vers le backend (ex: `dev/backend`)
 
@@ -26,30 +26,31 @@ Créer un wrapper fonctionnel et testé pour UN service externe. Lire la documen
 ### 1. Lire les inputs
 
 1. `{backend_path}/../config/config.py` → **OBLIGATOIRE EN PREMIER** — comprendre le pattern Settings et les variables disponibles (`settings.{service}_api_key`, etc.)
-2. `{to-resarch_path}` → section du service `{service_name}` (doc résumée, format I/O, limites, patterns)
-3. `{architecture_path}/business-logic/*.md` → identifier OÙ ce service est appelé (quels Jobs, quelles fonctions)
+2. `{research_path}` → documentation complete du service (SDK, endpoints, I/O, limites, exemples de code)
+3. `{architecture_path}/business-logic/*.md` → identifier OU ce service est appele (quels Jobs, quelles fonctions)
 4. `{architecture_path}/schema.md` → schema DB actuel
-5. `{backend_path}/app/core/services/` → fichier service existant (stub à remplacer)
+5. `{backend_path}/app/core/services/` → fichier service existant (stub a remplacer)
 6. `{backend_path}/app/core/jobs/` → Jobs qui appellent ce service (pour comprendre le contexte d'appel)
 
-### 2. Compléter la documentation si nécessaire
+### 2. Completer la documentation si necessaire
 
-Si la section dans to-resarch.md manque de détails techniques pour implémenter :
+Si le fichier research manque de details techniques pour implementer :
 1. WebSearch pour `{service_name} python sdk {specific_topic}`
 2. WebFetch sur la doc officielle (API reference, exemples)
 3. Extraire les signatures exactes, types de retour, codes d'erreur
+4. **Mettre a jour le fichier research** `{research_path}` avec les infos complementaires
 
-### 3. Implémenter le wrapper
+### 3. Implementer le wrapper
 
 **Fichier** : `{backend_path}/app/core/services/{service_name}.py`
 
 Principes :
-- **Client centralisé** — Une instance/config partagée, pas de recréation à chaque appel
-- **Méthodes async** — Toutes les méthodes sont `async def`
+- **Client centralise** — Une instance/config partagee, pas de recreation a chaque appel
+- **Methodes async** — Toutes les methodes sont `async def`
 - **Types explicites** — Pydantic models pour les inputs/outputs du service (pas de `dict` bruts)
 - **Error handling robuste** — Exceptions custom, retry policy si pertinent, logging
 - **Idempotence** — Si le service le supporte (ex: Stripe idempotency keys)
-- **Configuration via settings** — Toutes les clés/secrets via `from config.config import settings` (JAMAIS `os.environ` directement)
+- **Configuration via settings** — Toutes les cles/secrets via `from config.config import settings` (JAMAIS `os.environ` directement)
 
 Structure type :
 
@@ -83,7 +84,7 @@ class {Service}Error(Exception):
 
 # === Client ===
 
-# Accès aux clés TOUJOURS via settings, JAMAIS via os.environ
+# Acces aux cles TOUJOURS via settings, JAMAIS via os.environ
 # Ex: settings.stripe_secret_key, settings.apify_api_token, etc.
 {client_init_code}
 
@@ -91,63 +92,58 @@ class {Service}Error(Exception):
 
 async def {operation}({params}) -> {ReturnType}:
     """
-    {Description de l'opération}.
-    Appelé par : {job/route qui l'appelle}
+    {Description de l'operation}.
+    Appele par : {job/route qui l'appelle}
     """
     {implementation}
 ```
 
-### 4. Tester indépendamment
+### 4. Tester avec les vraies cles API
 
 **Fichier** : `{backend_path}/tests/test_services/test_{service_name}.py`
 
-2 types de tests :
+**Approche** : tester directement avec les vraies cles API en mode sandbox/test. Pas de fixtures mock — on verifie les vrais formats de reponse.
 
-#### Tests unitaires (sans clé API)
-- Valider la construction des requêtes
-- Valider le parsing des réponses (depuis des fixtures JSON)
-- Valider le error handling (réponses d'erreur simulées)
-- Valider les types Pydantic
+#### Tests d'integration (avec cle API)
 
 ```python
 import pytest
+from config.config import settings
 from app.core.services.{service_name} import *
 
-# Fixtures : réponses réelles copiées depuis la doc
-SAMPLE_RESPONSE = {json_from_doc}
-ERROR_RESPONSE = {error_json_from_doc}
+@pytest.mark.skipif(not getattr(settings, '{service}_api_key', None), reason="No API key configured")
+class TestService{Service}:
 
-def test_parse_{operation}_response():
-    result = {Service}Response(**SAMPLE_RESPONSE)
-    assert result.{field} == {expected}
+    async def test_{operation}_real(self):
+        """Appel reel au service en sandbox/test mode."""
+        result = await {operation}({test_params})
+        assert result is not None
+        # Verifier les champs de la reponse reelle
+        assert hasattr(result, '{expected_field}')
 
-def test_{operation}_error_handling():
-    with pytest.raises({Service}Error):
-        ...
+    async def test_{operation}_error_case(self):
+        """Verifier le comportement sur input invalide."""
+        with pytest.raises({Service}Error):
+            await {operation}({invalid_params})
 ```
 
-#### Tests d'intégration (avec clé API, optionnels)
-- Marqués `@pytest.mark.integration`
-- Skip auto si la clé API n'est pas dans settings
-- Appels réels au service en mode test/sandbox
+#### Ajustement iteratif
 
-```python
-from config.config import settings
+Apres chaque test :
+1. Si le format de reponse differe de la doc research → **adapter le code** (types Pydantic, parsing)
+2. Si des endpoints supplementaires sont necessaires → les ajouter
+3. Si des endpoints prevus sont inutiles → les retirer
+4. **Mettre a jour le fichier research** `{research_path}` avec les corrections
 
-@pytest.mark.integration
-@pytest.mark.skipif(not settings.{service}_api_key, reason="No API key")
-async def test_{operation}_real():
-    result = await {operation}({test_params})
-    assert result is not None
-```
+L'objectif : le code final reflete la **realite de l'API**, pas les suppositions de la doc.
 
-### 5. Vérifier la connexion avec le code existant
+### 5. Verifier la connexion avec le code existant
 
 Lire les Jobs et Routes qui appellent ce service :
-- Vérifier que les signatures matchent (params et return types)
-- Si le stub avait une signature différente de l'implémentation réelle → noter dans le rapport
+- Verifier que les signatures matchent (params et return types)
+- Si le stub avait une signature differente de l'implementation reelle → noter dans le rapport
 
-### 6. Produire le rapport de réconciliation
+### 6. Produire le rapport de reconciliation
 
 **Fichier** : `{backend_path}/reports/service-{service_name}.md`
 
@@ -155,51 +151,58 @@ Lire les Jobs et Routes qui appellent ce service :
 # Service Report: {service_name}
 
 ## Wrapper
-- `{backend_path}/app/core/services/{service_name}.py` ✅ créé
-- `{backend_path}/tests/test_services/test_{service_name}.py` ✅ {X}/{Y} tests pass
+- `{backend_path}/app/core/services/{service_name}.py` — cree
+- `{backend_path}/tests/test_services/test_{service_name}.py` — {X}/{Y} tests pass
 
-## Méthodes implémentées
+## Methodes implementees
 
-| Méthode | Appelée par | Testée | Status |
+| Methode | Appelee par | Testee | Status |
 |---------|-------------|--------|--------|
-| {method} | {job/route} | ✅/❌ | OK/SIGNATURE CHANGÉE |
+| {method} | {job/route} | OK/NON | OK/SIGNATURE CHANGEE |
+
+## Differences vs documentation research
+
+- {Champs de reponse differents de la doc}
+- {Endpoints ajoutes/retires}
+- {Ou "Aucune difference"}
 
 ## Changements requis ailleurs
 
 ### Database
-- {Table/colonne à ajouter, avec type et justification}
-- {Ou "Aucun changement DB nécessaire"}
+- {Table/colonne a ajouter, avec type et justification}
+- {Ou "Aucun changement DB necessaire"}
 
 ### Models Pydantic
-- {Champs à ajouter/modifier dans les models API}
+- {Champs a ajouter/modifier dans les models API}
 
 ### Routes
-- {Nouvelles routes nécessaires (ex: webhook endpoint)}
-- {Routes existantes à modifier}
+- {Nouvelles routes necessaires (ex: webhook endpoint)}
+- {Routes existantes a modifier}
 
 ### Jobs
-- {Jobs dont la signature d'appel au service a changé}
-- {Imports à mettre à jour}
+- {Jobs dont la signature d'appel au service a change}
+- {Imports a mettre a jour}
 
 ### Dependencies
-- {packages à ajouter dans requirements.txt avec version}
+- {packages a ajouter dans requirements.txt avec version}
 
 ### Configuration
-- {Variables d'environnement ajoutées/modifiées}
+- {Variables d'environnement ajoutees/modifiees}
 ```
 
 ## Output
 
-Fichiers créés :
-- `{backend_path}/app/core/services/{service_name}.py` — Wrapper réel
-- `{backend_path}/tests/test_services/test_{service_name}.py` — Tests
-- `{backend_path}/reports/service-{service_name}.md` — Rapport de réconciliation
+Fichiers crees/modifies :
+- `{backend_path}/app/core/services/{service_name}.py` — Wrapper reel
+- `{backend_path}/tests/test_services/test_{service_name}.py` — Tests d'integration
+- `{backend_path}/reports/service-{service_name}.md` — Rapport de reconciliation
+- `{research_path}` — Mis a jour si des corrections ont ete necessaires
 
-## Règles strictes
+## Regles strictes
 
 - NE PAS modifier les fichiers d'autres services
 - NE PAS modifier models.py, migrations, routes ou jobs directement
-- TOUT changement nécessaire ailleurs va dans le RAPPORT uniquement
-- Utiliser les VRAIS formats I/O de la documentation (pas d'invention)
-- Les tests unitaires doivent passer SANS clé API
-- Les fixtures de test doivent venir de la documentation officielle
+- TOUT changement necessaire ailleurs va dans le RAPPORT uniquement
+- Tester avec les VRAIES cles API (pas de fixtures mock)
+- Si la cle API n'est pas configuree, marquer les tests en skip (pas en echec)
+- Mettre a jour le fichier research si les reponses reelles different de la doc

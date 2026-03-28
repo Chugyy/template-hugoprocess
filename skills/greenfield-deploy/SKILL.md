@@ -1,40 +1,50 @@
 ---
 name: greenfield-deploy
 description: >
-  Déploie une application complète sur Dokploy Cloud. Génère les Dockerfiles,
-  push sur GitHub, crée le projet Dokploy, configure GitHub/build/env/domaines,
-  crée la DB, déploie et vérifie les logs runtime.
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, mcp__dokploy__project-all, mcp__dokploy__project-create, mcp__dokploy__project-one, mcp__dokploy__application-create, mcp__dokploy__application-one, mcp__dokploy__application-update, mcp__dokploy__application-deploy, mcp__dokploy__application-redeploy, mcp__dokploy__application-reload, mcp__dokploy__application-stop, mcp__dokploy__application-start, mcp__dokploy__application-cleanQueues, mcp__dokploy__application-saveGithubProvider, mcp__dokploy__application-saveBuildType, mcp__dokploy__application-saveEnvironment, mcp__dokploy__domain-create, mcp__dokploy__postgres-create, mcp__ssh-mcp-personal-vps__execute-command
+  Deploie une application complete sur Dokploy Cloud. Genere les Dockerfiles,
+  le workflow GitHub Actions (CI/CD), push sur GitHub, cree le projet Dokploy,
+  configure Docker provider (GHCR), env, domaines, health checks, rollback auto,
+  cree la DB, deploie et verifie les logs runtime.
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, mcp__dokploy__project-all, mcp__dokploy__project-create, mcp__dokploy__project-one, mcp__dokploy__application-create, mcp__dokploy__application-one, mcp__dokploy__application-update, mcp__dokploy__application-deploy, mcp__dokploy__application-redeploy, mcp__dokploy__application-reload, mcp__dokploy__application-stop, mcp__dokploy__application-start, mcp__dokploy__application-saveDockerProvider, mcp__dokploy__application-saveBuildType, mcp__dokploy__domain-create, mcp__dokploy__postgres-create, mcp__ssh-mcp-personal-vps__execute-command, mcp__hostinger__DNS_getDNSRecordsV1, mcp__hostinger__DNS_validateDNSRecordsV1, mcp__hostinger__DNS_updateDNSRecordsV1, mcp__hostinger__domains_getDomainListV1
 model: opus
 user-invocable: true
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
-# Déploiement sur Dokploy Cloud
+> **Convention projet** : Tous les chemins `docs/` et `dev/` sont relatifs au dossier projet actif (ex: `./tests-note/docs/prd.md`). Le dossier projet est communique par l'utilisateur ou le workflow parent.
 
-Déploie le contenu de `dev/` sur Dokploy Cloud. Le dossier `dev/` EST le repo GitHub (backend/ + frontend/ à la racine du repo).
+# Deploiement sur Dokploy Cloud (CI/CD)
 
-## Prérequis
+Deploie le contenu de `dev/` sur Dokploy Cloud. Le dossier `dev/` EST le repo GitHub (backend/ + frontend/ a la racine du repo).
 
-→ `dev/backend/` et `dev/frontend/` existent avec du code fonctionnel
-→ `.mcp.json` configuré avec `dokploy` et `ssh-mcp-personal-vps`
-→ L'utilisateur fournit : nom de domaine (ex: `app.mondomaine.fr`)
-→ Le repo GitHub existe (l'utilisateur fournit l'URL)
+**Architecture CI/CD** : GitHub Actions build les images Docker et les push sur GHCR (GitHub Container Registry). Le VPS ne fait que pull + run — aucun build sur le serveur de prod.
 
-## Constantes Dokploy Cloud
+## Prerequisites
 
-Récupérer ces valeurs depuis une application existante (via `application-one` sur un projet qui fonctionne) :
+> `dev/backend/` et `dev/frontend/` existent avec du code fonctionnel
+> `.mcp.json` configure avec `dokploy` et `ssh-mcp-personal-vps`
+> L'utilisateur fournit : nom de domaine (ex: `app.mondomaine.fr`)
+> Le repo GitHub existe (l'utilisateur fournit l'URL)
 
-- **serverId** : obligatoire pour `application-create` sur Dokploy Cloud
-- **githubId** : ID de l'intégration GitHub App
+## Constantes
+
+### Dokploy Cloud
+
+Recuperer le `serverId` depuis une application existante :
 
 ```
-Appeler project-all → prendre une app existante → application-one → extraire serverId + githubId
+Appeler project-all → prendre une app existante → application-one → extraire serverId
 ```
+
+### Credentials GHCR & Dokploy
+
+Toutes les credentials sont stockees dans `.claude/.env` (gitignore). Lire ce fichier pour obtenir :
+- `GHCR_REGISTRY_URL`, `GHCR_USERNAME`, `GHCR_PAT` — Docker provider GHCR
+- `DOKPLOY_API_KEY`, `DOKPLOY_URL` — API Dokploy pour le redeploy
 
 ---
 
-## Phase 1 — Préparation du code
+## Phase 1 — Preparation du code
 
 ### 1.1 Dockerfiles
 
@@ -64,8 +74,8 @@ CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--wo
 ```
 
 **Points critiques backend :**
-- `COPY requirements.txt` (pas `config/requirements.txt`) — le fichier à la racine du backend
-- `requirements.txt` doit être un `pip freeze` complet (pas de versions min, toutes les deps transitives)
+- `COPY requirements.txt` (pas `config/requirements.txt`) — le fichier a la racine du backend
+- `requirements.txt` doit etre un `pip freeze` complet (pas de versions min, toutes les deps transitives)
 - User non-root `appuser`
 - Healthcheck sur `/health`
 
@@ -110,10 +120,9 @@ CMD ["node", "server.js"]
 
 **Points critiques frontend :**
 - `node:22-slim` (LTS) — PAS node:24 (pas de prebuilt binaries, build lent)
-- `ENV HOSTNAME=0.0.0.0` dans le runner — OBLIGATOIRE sinon standalone écoute sur le hostname container
+- `ENV HOSTNAME=0.0.0.0` dans le runner — OBLIGATOIRE sinon standalone ecoute sur le hostname container
 - `NEXT_PUBLIC_API_URL` en ARG (baked at build time)
 - `output: "standalone"` dans `next.config.ts` — OBLIGATOIRE
-- Pas de `reactCompiler: true` — trop CPU-intensive pour les builds VPS
 
 **Frontend `.dockerignore`** (`dev/frontend/.dockerignore`) :
 
@@ -125,7 +134,120 @@ node_modules
 .env*
 ```
 
-### 1.2 run.sh (dev local)
+### 1.2 Workflow GitHub Actions (CI/CD)
+
+**IMPORTANT** : C'est le coeur du nouveau process. GitHub Actions build les images et les push sur GHCR. Le VPS ne build plus rien.
+
+Creer `dev/.github/workflows/deploy.yml` :
+
+```yaml
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # OWNER is set per-job via lowercase step (GHCR requires lowercase tags)
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ github.event.repository.name }}-backend:latest
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ github.event.repository.name }}-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ github.event.repository.name }}-frontend:latest
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ github.event.repository.name }}-frontend:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy backend
+        run: |
+          curl -s -X POST '${{ secrets.DOKPLOY_URL }}/trpc/application.deploy' \
+            -H 'x-api-key: ${{ secrets.DOKPLOY_API_KEY }}' \
+            -H 'Content-Type: application/json' \
+            -d '{"json":{"applicationId":"${{ secrets.DOKPLOY_BACKEND_ID }}"}}'
+
+      - name: Wait for backend
+        run: sleep 30
+
+      - name: Deploy frontend
+        run: |
+          curl -s -X POST '${{ secrets.DOKPLOY_URL }}/trpc/application.deploy' \
+            -H 'x-api-key: ${{ secrets.DOKPLOY_API_KEY }}' \
+            -H 'Content-Type: application/json' \
+            -d '{"json":{"applicationId":"${{ secrets.DOKPLOY_FRONTEND_ID }}"}}'
+```
+
+**Secrets GitHub a configurer** (via `gh secret set` depuis `dev/`) :
+
+```bash
+gh secret set DOKPLOY_URL -b "https://app.dokploy.com/api"
+gh secret set DOKPLOY_API_KEY -b "{DOKPLOY_API_KEY}"
+gh secret set DOKPLOY_BACKEND_ID -b "{backend_applicationId}"
+gh secret set DOKPLOY_FRONTEND_ID -b "{frontend_applicationId}"
+gh secret set NEXT_PUBLIC_API_URL -b "https://{domain_api}"
+```
+
+**GITHUB_TOKEN** est fourni automatiquement par GitHub Actions — pas besoin de le configurer.
+
+### 1.3 run.sh (dev local)
 
 **Backend** (`dev/backend/run.sh`) :
 
@@ -135,95 +257,113 @@ SSH_HOST="root@{VPS_IP}"
 LOCAL_PORT=5454
 REMOTE_PORT=5454
 
-echo "🔗 Opening SSH tunnel to PostgreSQL..."
+echo "Opening SSH tunnel to PostgreSQL..."
 ssh -f -N -L $LOCAL_PORT:localhost:$REMOTE_PORT $SSH_HOST
 
 cleanup() {
-    echo "🧹 Closing SSH tunnel..."
+    echo "Closing SSH tunnel..."
     pkill -f "ssh -f -N -L $LOCAL_PORT:localhost:$REMOTE_PORT"
 }
 trap cleanup EXIT INT TERM
 
-echo "🚀 Starting FastAPI..."
+echo "Starting FastAPI..."
 source .venv/bin/activate
 python -m app.api.main
 ```
 
-### 1.3 Git init + push
+### 1.4 Git init + push
 
-Le repo Git est dans `dev/` (PAS à la racine du projet). Le repo contient `backend/` et `frontend/` à sa racine.
+Le repo Git est dans `dev/` (PAS a la racine du projet). Le repo contient `backend/`, `frontend/` et `.github/` a sa racine.
 
 ```bash
 cd dev/
 git init
 git remote add origin {GITHUB_URL}
-git add backend/ frontend/
+git add backend/ frontend/ .github/
 git commit -m "Initial commit"
 git push -u origin main
 ```
+
+**IMPORTANT** : Ne pas oublier `.github/` dans le `git add` — sans ca, le workflow CI/CD ne sera pas declenche.
 
 ---
 
 ## Phase 2 — Configuration Dokploy
 
-**IMPORTANT** : Dokploy Cloud a une concurrence de 1 déploiement par serveur (queue Inngest). Les opérations doivent être séquentielles.
-
-### 2.1 Créer le projet
+### 2.1 Creer le projet
 
 ```
 project-create(name: "{APP_NAME}", description: "{description}")
-→ Récupérer projectId + environmentId
+-> Recuperer projectId + environmentId
 ```
 
-### 2.2 Créer les applications
+### 2.2 Creer les applications
 
 **OBLIGATOIRE** : passer `serverId` sur Dokploy Cloud, sinon erreur "Authentication failed" (trompeuse).
 
+**OBLIGATOIRE** : passer `appName` pour avoir des noms de services Docker lisibles (sinon Dokploy genere un nom aleatoire type `app-hack-wireless-program-u93hom`).
+
+Convention : `{projet}-backend` et `{projet}-frontend` (ex: `notes-app-backend`, `notes-app-frontend`). Pas de caracteres speciaux, que des minuscules et tirets.
+
 ```
-application-create(name: "backend", environmentId: {envId}, serverId: {serverId})
-application-create(name: "frontend", environmentId: {envId}, serverId: {serverId})
-→ Récupérer les 2 applicationId
+application-create(name: "backend", appName: "{projet}-backend", environmentId: {envId}, serverId: {serverId})
+application-create(name: "frontend", appName: "{projet}-frontend", environmentId: {envId}, serverId: {serverId})
+-> Recuperer les 2 applicationId
 ```
 
-### 2.3 Connecter GitHub
+### 2.3 Configurer le Docker provider (GHCR)
+
+**C'est ici que ca change** : on ne connecte plus GitHub comme source. On configure un Docker provider qui pull depuis GHCR.
 
 ```
 Pour chaque app :
-  application-saveGithubProvider(
+  application-saveDockerProvider(
     applicationId: {appId},
-    owner: "{GITHUB_OWNER}",
-    repository: "{REPO_NAME}",
-    branch: "main",
-    buildPath: "/",
-    githubId: {githubId},
-    enableSubmodules: false,
-    triggerType: "push"
+    dockerImage: "ghcr.io/chugyy/{REPO_NAME}-{backend|frontend}:latest",
+    registryUrl: "ghcr.io",
+    username: "Chugyy",
+    password: "{GHCR_PAT}"
   )
 ```
 
-**NOTE** : Le repo doit être autorisé dans l'app GitHub Dokploy (GitHub → Settings → Applications → dokploy-app → Repository access).
-
-### 2.4 Configurer le build
+Puis changer le source type :
 
 ```
-Pour chaque app, utiliser application-update :
+application-update(
+  applicationId: {appId},
+  sourceType: "docker"
+)
+```
+
+### 2.4 Configurer Swarm (health check + rollback + zero-downtime)
+
+**IMPORTANT** : C'est ce qui empeche les crash loops et garantit le zero-downtime.
+
+```
+Pour chaque app, via application-update :
 
 Backend :
-  buildType: "dockerfile"
-  dockerfile: "backend/Dockerfile"
-  dockerContextPath: "backend"
-  dockerBuildStage: ""
   networkSwarm: [{"Target": "db-network"}, {"Target": "dokploy-network"}]
+  healthCheckSwarm: {"Test": ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"], "Interval": 30000000000, "Timeout": 10000000000, "Retries": 3, "StartPeriod": 40000000000}
+  updateConfigSwarm: {"Parallelism": 1, "Order": "start-first", "FailureAction": "rollback", "Monitor": 30000000000}
+  rollbackConfigSwarm: {"Parallelism": 1, "Order": "stop-first", "FailureAction": "pause"}
+  restartPolicySwarm: {"Condition": "on-failure", "MaxAttempts": 3, "Delay": 10000000000, "Window": 120000000000}
 
 Frontend :
-  buildType: "dockerfile"
-  dockerfile: "frontend/Dockerfile"
-  dockerContextPath: "frontend"
-  dockerBuildStage: ""
   networkSwarm: [{"Target": "dokploy-network"}]
+  healthCheckSwarm: {"Test": ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\" || exit 1"], "Interval": 30000000000, "Timeout": 10000000000, "Retries": 3, "StartPeriod": 40000000000}
+  updateConfigSwarm: {"Parallelism": 1, "Order": "start-first", "FailureAction": "rollback", "Monitor": 30000000000}
+  rollbackConfigSwarm: {"Parallelism": 1, "Order": "stop-first", "FailureAction": "pause"}
+  restartPolicySwarm: {"Condition": "on-failure", "MaxAttempts": 3, "Delay": 10000000000, "Window": 120000000000}
 ```
 
-**IMPORTANT buildPath** : toujours `/` (racine du repo). Le `dockerContextPath` pointe vers le sous-dossier. Si `buildPath` = `/backend`, Dokploy fait un double path `backend/backend/` → crash.
+**Explication des valeurs Swarm** (en nanosecondes) :
+- `Interval: 30000000000` = 30s entre chaque health check
+- `Timeout: 10000000000` = 10s max par health check
+- `StartPeriod: 40000000000` = 40s de grace au demarrage (temps pour que l'app boot)
+- `Monitor: 30000000000` = 30s d'observation apres deploy avant de valider
+- `MaxAttempts: 3` = max 3 tentatives de restart avant d'abandonner (plus de crash loop infini)
+- `FailureAction: "rollback"` = si le health check echoue, revenir a la version precedente
 
 ### 2.5 Configurer les variables d'environnement
 
@@ -242,21 +382,20 @@ Backend (via application-update, champ "env") :
   FRONTEND_URL=https://{domain_frontend}
   {autres variables selon le projet}
 
-Frontend (via application-update, champ "env" ET "buildArgs") :
-  env: "NEXT_PUBLIC_API_URL=https://{domain_api}\nHOSTNAME=0.0.0.0"
-  buildArgs: "NEXT_PUBLIC_API_URL=https://{domain_api}"
+Frontend (via application-update, champ "env") :
+  env: "HOSTNAME=0.0.0.0"
 ```
 
-**IMPORTANT env format** : Utiliser l'API directe `application.saveEnvironment` via curl (pas le MCP qui retourne 400). Les champs obligatoires sont : `applicationId`, `env`, `buildArgs`, `buildSecrets`, `createEnvFile`.
+**IMPORTANT env format** : Utiliser `application-update` (MCP) avec le champ `env` (string avec `\n` entre chaque variable). Le MCP `saveEnvironment` retourne 400 systematiquement — NE PAS l'utiliser.
 
-```bash
-curl -s -X POST 'https://app.dokploy.com/api/trpc/application.saveEnvironment' \
-  -H 'x-api-key: {API_KEY}' \
-  -H 'Content-Type: application/json' \
-  -d '{"json":{"applicationId":"{appId}","env":"{env_string}","buildArgs":"","buildSecrets":"","createEnvFile":true}}'
+```
+application-update(
+  applicationId: {appId},
+  env: "VAR1=value1\nVAR2=value2\nVAR3=value3"
+)
 ```
 
-**IMPORTANT frontend** : `NEXT_PUBLIC_API_URL` doit être dans `env` ET dans `buildArgs`. Le `env` permet à Dokploy de créer le `.env` dans le context Docker. Le `buildArgs` injecte la valeur au build time.
+**NOTE** : `NEXT_PUBLIC_API_URL` n'est plus dans les env Dokploy du frontend. Il est injecte au build time via le `build-args` du workflow GitHub Actions (secret `NEXT_PUBLIC_API_URL`). C'est plus propre : la valeur est bakee dans l'image, pas lue au runtime.
 
 ### 2.6 Configurer les domaines
 
@@ -278,13 +417,26 @@ Convention de nommage :
 - Frontend : `{app}.{domain}` (ex: `info-flash.multimodal-house.fr`)
 - Backend : `{app}-api.{domain}` (ex: `info-flash-api.multimodal-house.fr`)
 
-**Rappeler à l'utilisateur** : configurer les DNS (A records) chez le registrar pointant vers l'IP du VPS.
+**DNS** : configure automatiquement via le MCP Hostinger (Phase 4.5). Plus besoin de rappeler a l'utilisateur.
+
+### 2.7 Configurer les GitHub Secrets
+
+Apres avoir cree les apps Dokploy et recupere les `applicationId`, configurer les secrets du repo :
+
+```bash
+cd dev/
+gh secret set DOKPLOY_URL -b "https://app.dokploy.com/api"
+gh secret set DOKPLOY_API_KEY -b "claude_codeYyUQDYxUuSWvjRpSVLzRztQKoHUkSafUHRfaSWgJaFmDYbcKMrihQnfiusqCvcTn"
+gh secret set DOKPLOY_BACKEND_ID -b "{backend_applicationId}"
+gh secret set DOKPLOY_FRONTEND_ID -b "{frontend_applicationId}"
+gh secret set NEXT_PUBLIC_API_URL -b "https://{domain_api}"
+```
 
 ---
 
-## Phase 3 — Base de données
+## Phase 3 — Base de donnees
 
-### 3.1 Créer la DB sur postgres-unified
+### 3.1 Creer la DB sur postgres-unified
 
 Via SSH MCP :
 
@@ -292,23 +444,21 @@ Via SSH MCP :
 docker exec $(docker ps -q -f name=postgres-unified) psql -U postgres -c "CREATE DATABASE \"{db_name}\";"
 ```
 
-Les migrations s'exécutent automatiquement au premier démarrage du backend (via `init_db()` dans le lifespan).
+Les migrations s'executent automatiquement au premier demarrage du backend (via `init_db()` dans le lifespan).
 
 ---
 
-## Phase 3.5 — Pré-deploy checks
+## Phase 3.5 — Pre-deploy checks
 
-### 3.5.1 Vérifier le load serveur
+### 3.5.1 Verifier le load serveur
 
-**OBLIGATOIRE** avant tout déploiement. Un build Docker consomme beaucoup de CPU.
+Verifier que le VPS est dans un etat sain. Le deploy ne build plus rien sur le VPS (juste un pull), donc c'est moins critique qu'avant, mais ca reste une bonne pratique.
 
 ```bash
-uptime  # load average doit être < 10
+uptime  # load average doit etre < 5 (pas de build local, seuil plus bas)
 ```
 
-**Si load > 20** : NE PAS déployer. Attendre que ça descende. Identifier la cause (builds orphelins, containers en boucle).
-
-### 3.5.2 Nettoyer les orphelins après suppression d'un projet
+### 3.5.2 Nettoyer les orphelins apres suppression d'un projet
 
 Quand on supprime un projet Dokploy, **3 types d'orphelins** restent sur le VPS :
 
@@ -323,7 +473,7 @@ docker service rm {service_name}
 
 #### B. Configs Traefik (CRITIQUE)
 
-Les fichiers `.yml` dans `/etc/dokploy/traefik/dynamic/` ne sont PAS supprimés. Si un nouveau projet réutilise le même domaine, Traefik aura **deux routes pour le même domaine** → l'ancienne (service mort) prend le dessus → 502 Bad Gateway.
+Les fichiers `.yml` dans `/etc/dokploy/traefik/dynamic/` ne sont PAS supprimes. Si un nouveau projet reutilise le meme domaine, Traefik aura **deux routes pour le meme domaine** -> l'ancienne (service mort) prend le dessus -> 502 Bad Gateway.
 
 ```bash
 # Lister les configs Traefik
@@ -336,184 +486,266 @@ rm /etc/dokploy/traefik/dynamic/{ancien_appName}.yml
 docker kill -s HUP dokploy-traefik
 ```
 
-#### C. Docker proxy orphelins (ports bloqués)
+#### C. Docker proxy orphelins (ports bloques)
 
-Si postgres-unified ou un autre service ne démarre plus avec "address already in use", un docker-proxy orphelin tient le port.
+Si postgres-unified ou un autre service ne demarre plus avec "address already in use", un docker-proxy orphelin tient le port.
 
 ```bash
 lsof -i :{port}    # trouver le PID
-kill {PID}          # libérer le port
+kill {PID}          # liberer le port
 docker service update --force {service_name}
 ```
 
 **ATTENTION** :
-- **JAMAIS `docker kill $(docker ps -q)`** — ça kill TOUS les containers y compris Traefik (qui est un container standalone, pas un service Swarm, et ne revient pas tout seul)
+- **JAMAIS `docker kill $(docker ps -q)`** — ca kill TOUS les containers y compris Traefik (qui est un container standalone, pas un service Swarm, et ne revient pas tout seul)
 - **TOUJOURS cibler par nom** : `docker service rm {nom_exact}`
-- **Les volumes sont séparés des containers** — supprimer un service ne supprime pas les données
+- **Les volumes sont separes des containers** — supprimer un service ne supprime pas les donnees
 
-### 3.5.3 Vérifier que postgres-unified tourne
+### 3.5.3 Verifier que postgres-unified tourne
 
 ```bash
 docker service ls | grep postgres-unified
-# Doit être X/X (pas 0/X)
+# Doit etre X/X (pas 0/X)
 ```
 
 Si `0/X` : attendre ou `docker service update --force postgres-unified`.
 
 ---
 
-## Phase 4 — Déploiement
+## Phase 4 — Deploiement
 
-### 4.1 Concurrence Dokploy Cloud
+### 4.1 Premier deploiement (initial)
 
-**Dokploy Cloud = 1 seul déploiement à la fois par serveur** (queue Inngest, `limit: 1` par `serverId`). Ce n'est PAS un bug, c'est by design pour protéger les resources du VPS.
+Le premier deploy est declenche manuellement via l'API Dokploy (le workflow GitHub Actions le fera automatiquement par la suite).
 
-Conséquences :
-- Déployer backend PUIS frontend (séquentiel)
-- Si un deploy est lancé pendant qu'un autre tourne, il est mis en queue
-- L'API renvoie `true` même si le deploy est en queue (fire-and-forget vers Inngest)
-- `cleanQueues` est un **noop** sur Dokploy Cloud (conçu pour BullMQ self-hosted)
+**Deployer sequentiellement** (1 seul deploy a la fois par serveur — contrainte Inngest) :
 
-### 4.2 Lancer les déploiements
-
-**Utiliser l'API directe** (plus fiable que le MCP pour les mutations) :
-
-```bash
-# Backend en premier
-curl -s -X POST 'https://app.dokploy.com/api/trpc/application.deploy' \
-  -H 'x-api-key: {API_KEY}' \
-  -H 'Content-Type: application/json' \
-  -d '{"json":{"applicationId":"{backend_id}"}}'
-
-# Attendre que le backend soit done sur Dokploy
-# Puis frontend
-curl -s -X POST 'https://app.dokploy.com/api/trpc/application.deploy' \
-  -H 'x-api-key: {API_KEY}' \
-  -H 'Content-Type: application/json' \
-  -d '{"json":{"applicationId":"{frontend_id}"}}'
+```
+1. application-deploy(applicationId: {backend_id})
+2. Attendre status "done" via polling (Phase 5.1)
+3. application-deploy(applicationId: {frontend_id})
+4. Attendre status "done" via polling (Phase 5.1)
 ```
 
-**Vérifier le statut** via le dashboard Dokploy ou via API :
-```bash
-curl -s 'https://app.dokploy.com/api/trpc/application.one?input=%7B%22json%22%3A%7B%22applicationId%22%3A%22{appId}%22%7D%7D' \
-  -H 'x-api-key: {API_KEY}' | python3 -c "import sys,json; d=json.load(sys.stdin)['result']['data']['json']; print(f\"Status: {d['applicationStatus']}, Deployments: {len(d.get('deployments',[]))}\")"
+### 4.2 Deploys suivants (automatiques)
+
+Apres le premier deploy, le workflow GitHub Actions gere tout :
+
+```
+git push sur main
+  -> GitHub Actions build les images (backend + frontend en parallele)
+  -> Push sur GHCR
+  -> Appel API Dokploy pour redeploy (sequentiel : backend puis frontend)
+  -> Dokploy pull les nouvelles images depuis GHCR
+  -> Swarm fait un rolling update (start-first = zero-downtime)
+  -> Si health check echoue -> rollback auto a l'image precedente
 ```
 
-### 4.3 Si un déploiement ne démarre pas
+### 4.3 Si un deploiement ne demarre pas
 
-L'API renvoie `true` mais rien ne se passe = queue Inngest bloquée.
+L'API renvoie `true` mais rien ne se passe = queue Inngest bloquee.
 
 **Causes** :
-- Un ancien deploy n'a jamais terminé (orphelin d'un projet supprimé)
+- Un ancien deploy n'a jamais termine (orphelin d'un projet supprime)
 - Services Docker orphelins sur le VPS
-- Load serveur trop élevé
 
 **Solutions** (dans l'ordre) :
-1. Vérifier le load (`uptime`) — si > 20, attendre
+1. Verifier le load (`uptime`)
 2. Nettoyer les services Docker orphelins (voir Phase 3.5.2)
-3. Vérifier sur le dashboard Dokploy s'il y a un deploy "running" bloqué → le cancel
-4. Attendre 5-10 min (Inngest peut avoir un timeout interne qui libère le slot)
+3. Verifier sur le dashboard Dokploy s'il y a un deploy "running" bloque -> le cancel
+4. Attendre 5-10 min (Inngest peut avoir un timeout interne qui libere le slot)
 
-### 4.4 Vérifier les runtime logs
+### 4.4 Verifier les runtime logs
 
-Après un build réussi, vérifier que le container démarre correctement via SSH MCP :
+Apres un deploy reussi, verifier que le container demarre correctement via SSH MCP :
 
 ```bash
 docker service logs {appName} --tail 20
 ```
 
-**Backend OK** = `INFO: Uvicorn running on http://0.0.0.0:8000` + `✅ Database initialized`
-**Frontend OK** = `✓ Ready in Xs` + écoute sur `0.0.0.0:3000`
+**Backend OK** = `INFO: Uvicorn running on http://0.0.0.0:8000` + `Database initialized`
+**Frontend OK** = `Ready in Xs` + ecoute sur `0.0.0.0:3000`
 
-**Erreurs fréquentes** :
-- `ModuleNotFoundError` → dépendance manquante dans requirements.txt (faire `pip freeze`)
-- Frontend écoute sur hostname container → `ENV HOSTNAME=0.0.0.0` manquant dans Dockerfile
-- Child processes die → erreur d'import ou de config (lire les logs complets)
-- Container restart en boucle → vérifier le load serveur, possible CPU starvation
-- Workers Uvicorn die silencieusement → lancer avec `--workers 1` (via `application.update` champ `command`) pour voir l'erreur
-- `.env` au mauvais endroit → Dokploy crée `.env` dans `{dockerContextPath}/` mais le code le cherche dans `config/`. Solution : `config.py` doit chercher le `.env` à la racine aussi (`pathlib.Path(__file__).parent.parent / ".env"`)
-- 502 Bad Gateway → configs Traefik orphelines d'un ancien projet supprimé (voir Phase 3.5.2.B)
+**Erreurs frequentes** :
+- `ModuleNotFoundError` -> dependance manquante dans requirements.txt (faire `pip freeze`)
+- Frontend ecoute sur hostname container -> `ENV HOSTNAME=0.0.0.0` manquant dans Dockerfile
+- Child processes die -> erreur d'import ou de config (lire les logs complets)
+- Container restart en boucle -> Swarm va rollback apres 3 tentatives (grace a `restartPolicySwarm`)
+- Workers Uvicorn die silencieusement -> lancer avec `--workers 1` (via `application.update` champ `command`) pour voir l'erreur
+- `.env` au mauvais endroit -> Dokploy cree `.env` dans le workdir du container. `config.py` doit chercher le `.env` a la racine aussi (`pathlib.Path(__file__).parent.parent / ".env"`)
+- 502 Bad Gateway -> configs Traefik orphelines d'un ancien projet supprime (voir Phase 3.5.2.B)
 
-### 4.5 Après un fix qui nécessite un rebuild
+### 4.5 Apres un fix qui necessite un rebuild
 
 ```
 1. Corriger le code localement
 2. git add + commit + push
-3. Lancer application.deploy via API directe (reclone le repo + rebuild)
+3. GitHub Actions rebuild + push sur GHCR + trigger redeploy automatiquement
 ```
+
+Pas besoin d'intervention manuelle. Si le push a ete fait mais que le workflow n'a pas tourne, verifier l'onglet Actions sur GitHub.
 
 **Lexique des commandes Dokploy** :
-- `deploy` = reclone le repo + rebuild l'image Docker + restart le service
-- `redeploy` = PAS de reclone, rebuild avec le code existant sur le VPS
-- `reload` = PAS de rebuild, juste restart le service (force Swarm à recréer le container)
-- `start` / `stop` = démarre/arrête le service sans rebuild
+- `deploy` = pull la derniere image depuis GHCR + restart le service (avec rolling update)
+- `redeploy` = meme chose que deploy (plus de distinction build/no-build en mode Docker)
+- `reload` = PAS de pull, juste restart le service (force Swarm a recreer le container avec la meme image)
+- `start` / `stop` = demarre/arrete le service sans pull
 
 ---
 
-## Phase 5 — Vérification finale
+## Phase 4.5 — DNS automatique (Hostinger)
 
-### 5.1 Services en ligne
+Configurer les records DNS automatiquement via le MCP Hostinger. Le VPS IP est recuperable depuis `application-one` -> `server.ipAddress`.
+
+### 4.5.1 Lister les domaines disponibles
 
 ```
+mcp__hostinger__domains_getDomainListV1()
+-> Proposer a l'utilisateur les domaines actifs
+-> L'utilisateur choisit le domaine + les sous-domaines
+```
+
+Convention :
+- Frontend : `{app}.{domain}` (ex: `notes.multimodal.digital`)
+- Backend : `{app}-api.{domain}` (ex: `notes-api.multimodal.digital`)
+
+### 4.5.2 Valider puis appliquer les records
+
+```
+# 1. Valider d'abord (dry-run)
+mcp__hostinger__DNS_validateDNSRecordsV1(
+  domain: "{domain}",
+  overwrite: false,
+  zone: [
+    {"name": "{app}-api", "type": "A", "ttl": 3600, "records": [{"content": "{VPS_IP}"}]},
+    {"name": "{app}", "type": "A", "ttl": 3600, "records": [{"content": "{VPS_IP}"}]}
+  ]
+)
+
+# 2. Si validation OK -> appliquer
+mcp__hostinger__DNS_updateDNSRecordsV1(
+  domain: "{domain}",
+  overwrite: false,
+  zone: [
+    {"name": "{app}-api", "type": "A", "ttl": 3600, "records": [{"content": "{VPS_IP}"}]},
+    {"name": "{app}", "type": "A", "ttl": 3600, "records": [{"content": "{VPS_IP}"}]}
+  ]
+)
+```
+
+**IMPORTANT** : `overwrite: false` pour ne pas toucher aux records existants (email, etc.). Les nouveaux records sont ajoutes.
+
+### 4.5.3 Verifier la propagation
+
+```bash
+# Via SSH sur le VPS
+dig +short {app}-api.{domain}
+dig +short {app}.{domain}
+```
+
+La propagation DNS peut prendre 5-30 min. Les certificats SSL (Let's Encrypt via Traefik) se generent automatiquement une fois le DNS propage.
+
+---
+
+## Phase 5 — Verification post-deploy automatique
+
+### 5.1 Polling du statut applicatif
+
+Apres chaque `application-deploy`, boucler sur `application-one` pour verifier le statut.
+
+```
+Boucle (max 12 iterations, 10s entre chaque = 2 min max) :
+  result = application-one(applicationId: {appId})
+  status = result.applicationStatus
+
+  Si status == "done" -> SUCCES, continuer
+  Si status == "error" -> ECHEC, lire les logs (docker service logs via SSH)
+  Si status == "running" ou "idle" -> attendre 10s, retry
+```
+
+### 5.2 Verification runtime via SSH
+
+Apres status "done", verifier que le container tourne effectivement :
+
+```bash
+# Services en ligne
 docker service ls | grep {appName}
+# Doit afficher X/X replicas (pas 0/X)
+
+# Logs runtime (20 dernieres lignes)
+docker service logs {appName} --tail 20 2>&1
+# Backend OK = "Uvicorn running on http://0.0.0.0:8000"
+# Frontend OK = "Ready in Xs"
 ```
 
-Vérifier `X/X` replicas (pas `0/X`).
+### 5.3 Verification endpoints
 
-### 5.2 Endpoints accessibles
+```bash
+# Depuis le VPS (bypass DNS)
+curl -s -o /dev/null -w "%{http_code}" http://localhost:{port}/health  # backend
+curl -s -o /dev/null -w "%{http_code}" http://localhost:{port}          # frontend
+```
 
-Demander à l'utilisateur de vérifier :
-- `https://{domain_api}/health` → doit répondre
-- `https://{domain_frontend}` → doit afficher l'app
+Si les containers tournent mais les endpoints ne repondent pas -> lire les logs complets (`docker service logs {appName} --tail 100`).
 
-### 5.3 Présenter le récapitulatif
+### 5.4 Presenter le recapitulatif
 
 ```
-✅ Déploiement terminé
+Deploiement termine
 
 Projet : {APP_NAME}
-Backend : https://{domain_api}
-Frontend : https://{domain_frontend}
+Backend : https://{domain_api} (status: {status})
+Frontend : https://{domain_frontend} (status: {status})
 DB : {db_name} sur postgres-unified
 
-GitHub : {repo_url} (auto-deploy on push)
+GitHub : {repo_url}
+GHCR : ghcr.io/chugyy/{repo_name}-backend:latest
+        ghcr.io/chugyy/{repo_name}-frontend:latest
+CI/CD : GitHub Actions (auto-deploy on push to main)
 Dokploy : https://app.dokploy.com/dashboard/project/{projectId}
 
-DNS à configurer (si pas fait) :
-  {domain_api} → A → {VPS_IP}
-  {domain_frontend} → A → {VPS_IP}
+Protection :
+  Health checks : actifs (30s interval, 3 retries)
+  Rollback auto : actif (si health check echoue)
+  Zero-downtime : actif (start-first)
+  Max restarts : 3 tentatives avant abandon
+
+DNS :
+  {domain_api} -> A -> {VPS_IP} (configure automatiquement)
+  {domain_frontend} -> A -> {VPS_IP} (configure automatiquement)
+  Propagation : 5-30 min, SSL auto via Let's Encrypt
 ```
 
 ---
 
-## Résumé des pièges Dokploy Cloud
+## Resume des pieges Dokploy Cloud
 
-| Piège | Solution |
+| Piege | Solution |
 |-------|----------|
 | `application-create` fail "Auth error" | Passer `serverId` (obligatoire sur Cloud) |
-| `saveGithubProvider` fail 400 | `buildPath` est obligatoire (ajouter `buildPath: "/"`) |
-| `buildPath` + `dockerContextPath` = double path | `buildPath: /`, `dockerContextPath: {service}` |
-| `saveEnvironment` fail 400 via MCP | Utiliser l'API directe curl avec tous les champs (`env`, `buildArgs`, `buildSecrets`, `createEnvFile`) |
-| Deploy renvoie 200 mais rien ne se passe | Queue Inngest bloquée — vérifier services orphelins sur VPS, load serveur, attendre |
-| `cleanQueues` ne fait rien | Normal sur Cloud — c'est un noop (BullMQ only). Pas de solution user-facing pour flush Inngest |
-| 1 seul deploy à la fois par serveur | By design (Inngest `limit: 1` par `serverId`). Déployer séquentiellement |
-| Frontend écoute sur hostname container | `ENV HOSTNAME=0.0.0.0` dans Dockerfile runner stage |
-| `NEXT_PUBLIC_API_URL` pas pris en compte | Mettre dans `env` ET `buildArgs` |
-| Image Docker pas mise à jour après rebuild | `redeploy` ou `reload` pour forcer Swarm à recréer le container |
-| `node:24` build très lent | Utiliser `node:22-slim` (LTS, prebuilt binaries) |
+| `saveEnvironment` fail 400 via MCP | Utiliser `application-update` avec le champ `env` a la place (teste et valide mars 2026) |
+| Deploy renvoie 200 mais rien ne se passe | Queue Inngest bloquee — verifier services orphelins sur VPS, attendre |
+| 1 seul deploy a la fois par serveur | By design (Inngest `limit: 1` par `serverId`). Deployer sequentiellement |
+| Frontend ecoute sur hostname container | `ENV HOSTNAME=0.0.0.0` dans Dockerfile runner stage |
+| Image GHCR non trouvee par Dokploy | Verifier `dockerImage`, `registryUrl`, `username`, `password` dans `saveDockerProvider` |
+| Health check echoue au premier deploy | Normal si `StartPeriod` trop court — augmenter a 60s si l'app met du temps a boot |
+| Rollback alors que la nouvelle version est correcte | Health check trop agressif — augmenter `Timeout` ou `Retries` |
+| `node:24` build tres lent dans GitHub Actions | Utiliser `node:22-slim` (LTS, prebuilt binaries) |
 | `requirements.txt` incomplet | Toujours utiliser `pip freeze` complet |
 | Suppression projet ne supprime pas les services Docker | `docker service rm {orphan}` via SSH |
 | Suppression projet ne supprime pas les configs Traefik | `rm /etc/dokploy/traefik/dynamic/{orphan}.yml` + `docker kill -s HUP dokploy-traefik` |
-| 502 Bad Gateway alors que l'app tourne | Configs Traefik orphelines d'un ancien projet → même domaine, deux routes, Traefik prend la morte |
-| Traefik disparaît après kill containers | Traefik = container standalone, PAS un service Swarm. Relancer manuellement (voir ci-dessous) |
-| `.env` au mauvais endroit | Dokploy crée `.env` dans `{dockerContextPath}/`. `config.py` doit aussi chercher à la racine |
+| 502 Bad Gateway alors que l'app tourne | Configs Traefik orphelines d'un ancien projet -> meme domaine, deux routes, Traefik prend la morte |
+| Traefik disparait apres kill containers | Traefik = container standalone, PAS un service Swarm. Relancer manuellement (voir ci-dessous) |
+| `.env` au mauvais endroit | `config.py` doit aussi chercher a la racine |
 | Workers Uvicorn meurent silencieusement | Passer `--workers 1` via `application.update` champ `command` pour voir l'erreur |
-| autoDeploy déclenche des builds à chaque push | Désactiver avec `application.update` `autoDeploy: false` pendant le debug |
-| Load serveur > 100 | Builds empilés + steal time. Killer les process ciblés, JAMAIS `docker kill $(docker ps -q)` |
+| GitHub Actions workflow pas declenche | Verifier que `.github/workflows/` est bien dans le repo (git add) |
+| GHCR push echoue dans GitHub Actions | Verifier `permissions: packages: write` dans le workflow |
+| GHCR tags "repository name must be lowercase" | `github.repository_owner` preserve la casse. Ajouter step `Lowercase owner` dans chaque job (deja dans le template) |
+| Postgres password auth failed via reseau overlay | Le password interne peut etre desynchronise. Faire `ALTER USER postgres WITH PASSWORD '...'` via `docker exec` |
 
 ## Restaurer Traefik (si disparu)
 
-Traefik est un container standalone (`--restart always`), PAS un service Swarm. Si killé, il faut le recréer manuellement :
+Traefik est un container standalone (`--restart always`), PAS un service Swarm. Si kille, il faut le recreer manuellement :
 
 ```bash
 docker rm -f dokploy-traefik 2>/dev/null
@@ -531,12 +763,12 @@ docker network connect dokploy-network dokploy-traefik
 docker network connect db-network dokploy-traefik
 ```
 
-## Règles de sécurité
+## Regles de securite
 
-1. **JAMAIS `docker kill $(docker ps -q)`** — ça kill Traefik (standalone, ne revient pas) + tous les autres projets
+1. **JAMAIS `docker kill $(docker ps -q)`** — ca kill Traefik (standalone, ne revient pas) + tous les autres projets
 2. **TOUJOURS cibler par nom** quand on supprime/kill un service ou container
-3. **Vérifier le load avant de déployer** — un build sur un serveur surchargé empire tout
-4. **Après suppression d'un projet Dokploy**, nettoyer 3 choses : services Docker + configs Traefik + docker-proxy orphelins
-5. **Les volumes survivent aux kills/rm** — les données sont safe
-6. **Désactiver `autoDeploy`** pendant le setup initial pour éviter les builds en cascade à chaque push
-7. **Traefik = container standalone** — si il disparaît, le recréer manuellement (voir section ci-dessus)
+3. **Verifier le load avant de deployer** — meme si le VPS ne build plus, un serveur surcharge peut rater le pull
+4. **Apres suppression d'un projet Dokploy**, nettoyer 3 choses : services Docker + configs Traefik + docker-proxy orphelins
+5. **Les volumes survivent aux kills/rm** — les donnees sont safe
+6. **Traefik = container standalone** — si il disparait, le recreer manuellement (voir section ci-dessus)
+7. **Ne jamais committer de secrets** dans le repo — utiliser `gh secret set` pour les GitHub Secrets

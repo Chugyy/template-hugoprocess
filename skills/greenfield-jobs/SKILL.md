@@ -7,8 +7,10 @@ description: >
 allowed-tools: Read, Write, Glob, Grep
 model: opus
 user-invocable: true
-disable-model-invocation: true
+disable-model-invocation: false
 ---
+
+> **Convention projet** : Tous les chemins `docs/` et `dev/` sont relatifs au dossier projet actif (ex: `./tests-note/docs/prd.md`). Le dossier projet est communiqué par l'utilisateur ou le workflow parent.
 
 # Du PRD aux Jobs & Services
 

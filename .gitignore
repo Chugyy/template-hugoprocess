@@ -18,6 +18,9 @@ package-lock.json
 **/uploads/*
 !**/uploads/.gitkeep
 
+# Env / Secrets
+.env
+
 # Logs
 *.log
 app.log
