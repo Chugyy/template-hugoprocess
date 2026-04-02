@@ -386,14 +386,26 @@ Frontend (via application-update, champ "env") :
   env: "HOSTNAME=0.0.0.0"
 ```
 
-**IMPORTANT env format** : Utiliser `application-update` (MCP) avec le champ `env` (string avec `\n` entre chaque variable). Le MCP `saveEnvironment` retourne 400 systematiquement — NE PAS l'utiliser.
+**IMPORTANT env format** : Le MCP `saveEnvironment` retourne 400 systematiquement — NE PAS l'utiliser.
 
+**CRITIQUE — NE PAS utiliser `application-update` MCP pour les env vars.** Le tool call MCP serialise les `\n` comme des literaux `\\n`, ce qui fait que Swarm recoit UNE SEULE variable geante au lieu de variables separees. Le backend ne peut alors lire aucune variable.
+
+**Methode validee** : passer par `curl` direct sur l'API tRPC Dokploy (via SSH MCP ou Bash) avec de vrais `\n` dans le JSON :
+
+```bash
+curl -s -X POST '{DOKPLOY_URL}/trpc/application.update' \
+  -H 'x-api-key: {DOKPLOY_API_KEY}' \
+  -H 'Content-Type: application/json' \
+  -d '{"json":{"applicationId":"{appId}","env":"VAR1=value1\nVAR2=value2\nVAR3=value3"}}'
 ```
-application-update(
-  applicationId: {appId},
-  env: "VAR1=value1\nVAR2=value2\nVAR3=value3"
-)
+
+Verifier apres deploy que Swarm a bien des variables separees :
+```bash
+docker service inspect {appName} --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d), 'entries')"
+# Doit afficher N entries (pas 1)
 ```
+
+**Apres chaque modification d'env vars, TOUJOURS redeploy** (`application-deploy`) sinon les changements ne sont pas appliques au service Swarm.
 
 **NOTE** : `NEXT_PUBLIC_API_URL` n'est plus dans les env Dokploy du frontend. Il est injecte au build time via le `build-args` du workflow GitHub Actions (secret `NEXT_PUBLIC_API_URL`). C'est plus propre : la valeur est bakee dans l'image, pas lue au runtime.
 
@@ -723,7 +735,10 @@ DNS :
 | Piege | Solution |
 |-------|----------|
 | `application-create` fail "Auth error" | Passer `serverId` (obligatoire sur Cloud) |
-| `saveEnvironment` fail 400 via MCP | Utiliser `application-update` avec le champ `env` a la place (teste et valide mars 2026) |
+| `saveEnvironment` fail 400 via MCP | NE PAS utiliser. Passer par `curl` direct sur l'API tRPC (voir Phase 2.5) |
+| `application-update` MCP corrompt les env vars | Le tool call serialise `\n` en `\\n` litteral → Swarm recoit 1 variable geante. **Toujours utiliser `curl` direct** pour les env vars (avril 2026) |
+| Env vars modifiees mais pas appliquees | TOUJOURS `application-deploy` apres modification des env vars |
+| `network not found` a la creation du service | Verifier `docker network ls` sur le VPS cible. Ne pas copier `db-network` si le VPS n'a pas postgres-unified |
 | Deploy renvoie 200 mais rien ne se passe | Queue Inngest bloquee — verifier services orphelins sur VPS, attendre |
 | 1 seul deploy a la fois par serveur | By design (Inngest `limit: 1` par `serverId`). Deployer sequentiellement |
 | Frontend ecoute sur hostname container | `ENV HOSTNAME=0.0.0.0` dans Dockerfile runner stage |
