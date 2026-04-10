@@ -20,14 +20,15 @@ Détailler TOUTES les fonctions (Jobs, CRUD, Services, Utils) pour UNE entité m
 
 ## Process
 
-### 1. Lire les inputs
+### 1. Lire les regles et inputs
 
-1. Lire `{fr_mapping_path}` → extraire la section de l'entité `{entity}`
-2. Lire les best practices : `.claude/resources/rules/best-practises-business-logic/`
-   - `jobs.md` — Patterns Jobs
-   - `crud.md` — Patterns CRUD
-   - `services.md` — Patterns Services
-3. Lire le template : `.claude/resources/templates/docs/architecture/backend/business-logic/business-logic-entity.md`
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques business logic (jobs, CRUD, services) — lire TOUS les fichiers de cette section
+- Obligatoire : architecture en couches (definition des couches, regles de decision, nommage)
+
+**Inputs projet** :
+1. Lire `{fr_mapping_path}` → extraire la section de l'entite `{entity}`
+2. Lire le template : `.claude/resources/templates/docs/architecture/backend/business-logic/business-logic-entity.md`
 
 ### 2. Détailler chaque Job
 
@@ -36,23 +37,29 @@ Pour chaque Job listé dans le mapping :
 ```markdown
 ### Job: {function_name}
 
+**Type:** {Primaire (reutilisable par d'autres jobs) / Secondaire}
 **Inputs:**
-- {param}: {type détaillé, pas de dict générique}
+- {param}: {type detaille, pas de dict generique}
 
-**Output:** {type détaillé}
+**Output:** {type detaille}
 
 **Workflow:**
-1. `{function}({params})` → {résultat}
-2. Si {condition} → {action}
-3. [TRANSACTION START]
-4. `{crud_function}({params})` → {résultat}
-5. [TRANSACTION END]
-6. `{service_function}({params})`
-7. Return {résultat final}
+1. `{function}({params})` → {resultat}
+2. **SI** {condition} :
+   a. `{function_branche_a}({params})` → {resultat}
+   b. `{suite_branche_a}({params})`
+3. **SINON** :
+   a. `{function_branche_b}({params})` → {resultat}
+4. [TRANSACTION START]
+5. `{crud_function}({params})` → {resultat}
+6. [TRANSACTION END]
+7. `{service_function}({params})`
+8. Return {resultat final}
 
-**Fonctions utilisées:**
-- {function_name} [{type}] ✅ (dans mapping)
-- {function_name} [{type}] ⚠️ NON DANS MAPPING → À AJOUTER
+**Fonctions utilisees:**
+- {function_name} [{type}] (dans mapping)
+- {function_name} [{type}] NON DANS MAPPING → A AJOUTER
+- {job_primaire} [Job] (si secondaire, lister les jobs primaires appeles)
 ```
 
 ### 3. Détailler chaque CRUD

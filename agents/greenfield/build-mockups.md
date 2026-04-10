@@ -22,8 +22,12 @@ Générer des pages HTML statiques standalone pour chaque page clé de l'applica
 
 ## Process
 
-### 1. Lire les specs
+### 1. Lire les regles et specs
 
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Conseille : bonnes pratiques frontend (design system Tailwind, theming, couleurs) pour le visuel
+
+**Specs projet** :
 1. `{frontend_arch_path}` — Pages, composants, structure
 2. Comprendre le branding (couleurs hex, font, border-radius, dark mode)
 3. Comprendre le layout (sidebar gauche, navbar top, etc.)

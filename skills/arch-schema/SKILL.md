@@ -18,7 +18,7 @@ Generation silencieuse. Pas de checkpoint humain.
 ## Prerequis
 
 1. Lire `docs/architecture/backend/business-logic/*.md` — Si absent, STOP, lancer `/arch-business-logic`
-2. Lire `docs/research/index.md` — Si absent, c'est OK
+2. Lire `../lib/researches/` — Recherches services externes (si pertinent)
 3. Lire `docs/architecture/backend/entities.md` — Pour la liste des entites
 4. `docs/architecture/configs/` doit exister
 
@@ -27,7 +27,7 @@ Generation silencieuse. Pas de checkpoint humain.
 ## Phase 1 — Database Schema (1 agent)
 
 **Agent** : `schema-architect`
-**Input** : Tous les `docs/architecture/backend/business-logic/*.md` + `docs/research/*.md`
+**Input** : Tous les `docs/architecture/backend/business-logic/*.md` + `../lib/researches/*.md`
 **Contexte** : `.claude/resources/rules/best-practises-build-databases/`
 **Output markdown** : `docs/architecture/backend/schema.md`
 **Output JSON** : `docs/architecture/configs/db.json`

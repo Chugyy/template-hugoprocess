@@ -21,18 +21,12 @@ Générer la documentation API REST FINALE et CONFORME pour UNE entité. Les bes
 
 ## Process
 
-### 1. Lire les best practices (AVANT de générer)
+### 1. Lire les regles (AVANT de generer)
 
-Lire TOUS les fichiers dans `.claude/resources/rules/best-practises-build-api/` :
-- `00-checklist-api.md` — Checklist complète
-- `principes-fondamentaux-rest.md`
-- `conception-des-urls-et-endpoints.md`
-- `methodes-http-et-codes-de-statut.md`
-- `gestion-des-donnees.md` — Pagination, filtres
-- `gestion-des-erreurs.md`
-- `pydantic-models-and-naming-conventions.md`
-- `securite.md`
-- `erreurs-courantes-a-eviter.md`
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques API (principes REST, URLs, methodes HTTP, pagination, erreurs, Pydantic models, securite, erreurs courantes) — lire TOUS les fichiers de cette section
+- Obligatoire : architecture en couches (quand une route delegue a un job vs CRUD direct)
+- Conseille : bonnes pratiques jobs (comprendre la logique derriere les endpoints complexes)
 
 ### 2. Lire les inputs
 

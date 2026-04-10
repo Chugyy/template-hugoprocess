@@ -17,20 +17,26 @@ Creer un wrapper fonctionnel et teste pour UN service externe. Lire la documenta
 ## Arguments attendus
 
 - `service_name` : Nom du service (ex: "stripe", "apify", "whisper", "anthropic")
-- `research_path` : Chemin vers le fichier research du service (ex: `docs/research/stripe.md`)
+- `research_path` : Chemin vers le fichier research du service dans la librairie partagee (ex: `../lib/researches/stripe.md`)
 - `architecture_path` : Chemin vers architecture (ex: `docs/architecture/backend`)
 - `backend_path` : Chemin vers le backend (ex: `dev/backend`)
 
 ## Process
 
-### 1. Lire les inputs
+### 1. Lire les regles, inputs et code existant
 
-1. `{backend_path}/../config/config.py` → **OBLIGATOIRE EN PREMIER** — comprendre le pattern Settings et les variables disponibles (`settings.{service}_api_key`, etc.)
-2. `{research_path}` → documentation complete du service (SDK, endpoints, I/O, limites, exemples de code)
-3. `{architecture_path}/business-logic/*.md` → identifier OU ce service est appele (quels Jobs, quelles fonctions)
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques services (client centralise, types Pydantic, exceptions custom, retry, testing)
+- Obligatoire : architecture en couches (role d'un service, conventions de nommage)
+- Conseille : bonnes pratiques API (si le service expose ou consomme une API REST)
+
+**Specs et code** :
+1. `{backend_path}/../config/config.py` → **EN PREMIER** — pattern Settings et variables disponibles
+2. `{research_path}` → documentation complete du service (SDK, endpoints, I/O, limites)
+3. `{architecture_path}/business-logic/*.md` → identifier OU ce service est appele
 4. `{architecture_path}/schema.md` → schema DB actuel
 5. `{backend_path}/app/core/services/` → fichier service existant (stub a remplacer)
-6. `{backend_path}/app/core/jobs/` → Jobs qui appellent ce service (pour comprendre le contexte d'appel)
+6. `{backend_path}/app/core/jobs/` → Jobs qui appellent ce service
 
 ### 2. Completer la documentation si necessaire
 

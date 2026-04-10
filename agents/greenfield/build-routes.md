@@ -21,11 +21,17 @@ Générer les models Pydantic, routes FastAPI et tests d'endpoints pour UNE enti
 
 ## Process
 
-### 1. Lire les specs ET le code existant
+### 1. Lire les regles, specs ET le code existant
 
-1. `{backend_path}/../config/config.py` — **OBLIGATOIRE EN PREMIER**
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques API (principes REST, methodes HTTP, URLs, gestion des erreurs, Pydantic models)
+- Obligatoire : architecture en couches (quand deleguer a un job vs CRUD direct)
+- Conseille : bonnes pratiques jobs (pour comprendre quand une route appelle un job vs CRUD)
+
+**Specs et code** :
+1. `{backend_path}/../config/config.py` — **EN PREMIER** — pattern Settings
 2. `{architecture_path}/api/{entity}.md` — Endpoints REST (routes, params, responses)
-3. `{architecture_path}/business-logic/{entity}.md` — Pour comprendre ce que chaque endpoint déclenche
+3. `{architecture_path}/business-logic/{entity}.md` — Ce que chaque endpoint declenche
 4. `{backend_path}/app/core/jobs/{entity}.py` — Jobs existants (si existent)
 5. `{backend_path}/app/database/crud/{entity}.py` — CRUD existant
 6. `{architecture_path}/schema.md` — Types des colonnes pour les models Pydantic

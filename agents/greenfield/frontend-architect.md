@@ -21,14 +21,18 @@ Générer l'architecture frontend complète dans UN fichier unique : layout, pag
 
 ## Process
 
-### 1. Lire les inputs
+### 1. Lire les regles et inputs
 
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques frontend (design system Tailwind, theming, typographie, erreurs courantes) — lire TOUS les fichiers de cette section
+- Conseille : bonnes pratiques API (comprendre les endpoints que le frontend consommera)
+
+**Inputs projet** :
 1. **PRD** : `{prd_path}` → UI Design Goals, Target Users, Roles
-2. **Endpoints API** : `{api_path}/*.md` → Tous les endpoints disponibles par entité
+2. **Endpoints API** : `{api_path}/*.md` → Tous les endpoints disponibles par entite
 3. **Composants UI disponibles** : Lister `{ui_components_path}/*.tsx`
-4. **Best practices frontend** : `.claude/resources/rules/best-practises-build-frontend/`
-5. **Projets de référence** : `.claude/resources/templates/projects/INDEX.md` → Identifier quels projets contiennent des patterns pertinents pour ce projet. Lire les composants source pour comprendre la structure à reproduire.
-6. **Template** : `.claude/resources/templates/docs/architecture/frontend/frontend-architecture.md`
+4. **Projets de reference** : `.claude/resources/templates/projects/INDEX.md` → Identifier quels projets contiennent des patterns pertinents. Lire les composants source.
+5. **Template** : `.claude/resources/templates/docs/architecture/frontend/frontend-architecture.md`
 
 ### 2. Définir le Layout Global
 

@@ -20,16 +20,11 @@ Générer le schema PostgreSQL FINAL et CONFORME depuis les fichiers business lo
 
 ## Process
 
-### 1. Lire les best practices (AVANT de générer)
+### 1. Lire les regles (AVANT de generer)
 
-Lire TOUS les fichiers dans `.claude/resources/rules/best-practises-build-databases/` :
-- `conception-du-schema.md`
-- `normalisation-des-donnees.md`
-- `indexation.md`
-- `operations-crud.md`
-- `securite.md`
-- `performance-et-optimisation.md`
-- `erreurs-courantes-a-eviter.md`
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques database (schema, normalisation, indexation, securite, performance, erreurs courantes) — lire TOUS les fichiers de cette section
+- Conseille : architecture en couches (comprendre comment le CRUD consommera le schema)
 
 ### 2. Extraire les besoins depuis la business logic
 

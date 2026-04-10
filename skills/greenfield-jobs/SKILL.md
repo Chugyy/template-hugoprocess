@@ -86,40 +86,62 @@ Poser des questions SEULEMENT pour :
 
 ### Format de présentation
 
-Pour chaque entité principale, présenter les jobs en langage humain :
+Pour chaque entité principale, présenter les jobs en langage humain avec branches conditionnelles si necessaire :
 
 ```
-📦 {Entité}
+{Entite}
 
-  ▸ Quand un {rôle} {action} :
-    1. {étape 1 en français}
-    2. {étape 2 en français}
-    3. {étape 3 en français}
-    → Résultat : {ce qui se passe}
-    → Service utilisé : {service} ({justification courte})
-
-  ▸ Quand un {rôle} {autre action} :
-    1. ...
+  ▸ Quand un {role} {action} :
+    1. {etape 1 en francais}
+    2. {etape 2 en francais}
+    3. SI {condition} :
+       a. {branche A}
+    4. SINON :
+       a. {branche B}
+    5. {etape commune}
+    → Resultat : {outcome principal OU outcome alternatif}
+    → Service utilise : {service} ({justification courte})
 ```
 
 **Exemple concret :**
 
 ```
-📦 Booking
+Booking
 
-  ▸ Quand un client réserve un logement :
-    1. On vérifie les disponibilités
-    2. On bloque les dates
-    3. On crée le paiement via Stripe
-    4. On envoie un email de confirmation via Resend
-    → Résultat : réservation confirmée, propriétaire notifié
+  ▸ Quand un client reserve un logement :
+    1. On verifie les disponibilites
+    2. On calcule le prix total
+    3. SI le client est abonne premium :
+       a. On applique la reduction
+       b. On utilise le moyen de paiement enregistre
+    4. SINON :
+       a. On redirige vers Stripe Checkout
+       b. On attend le webhook de confirmation
+    5. SI le paiement est confirme :
+       a. On bloque les dates
+       b. On envoie un email de confirmation via Resend
+       c. On notifie le proprietaire
+    6. SINON :
+       a. On enregistre l'echec
+       b. On notifie le client
+    → Resultat : reservation confirmee OU echec avec notification
     → Services : Stripe (paiement), Resend (email)
 
-  ▸ Quand un propriétaire annule une réservation :
+  ▸ Quand un proprietaire annule une reservation :
     1. On rembourse le client via Stripe
-    2. On libère les dates
+    2. On libere les dates
     3. On notifie le client par email
-    → Résultat : réservation annulée, client remboursé
+    → Resultat : reservation annulee, client rembourse
+```
+
+**Jobs reutilisables (primaires)** : si un meme bloc d'etapes apparait dans plusieurs jobs, le presenter comme un job primaire :
+
+```
+  ▸ [Primaire] Scraper un profil :
+    1. On recupere la page
+    2. On extrait les donnees structurees
+    → Resultat : donnees du profil
+    → Utilise par : onboarding, sync journalier, enrichissement contact
 ```
 
 ### Récapitulatif services

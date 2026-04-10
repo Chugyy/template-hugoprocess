@@ -1,34 +1,40 @@
 ---
 name: build-crud
 description: >
-  Génère le CRUD asyncpg + tests pour UNE entité.
-  Agent exécutant — suit les specs, teste contre la DB.
+  Genere le CRUD asyncpg + tests pour UNE entite.
+  Agent executant — suit les specs, teste contre la DB.
 allowed-tools: Read, Write, Edit, Glob, Grep
 model: sonnet
 ---
 
-# Build CRUD — Opérations DB pour une entité
+# Build CRUD — Operations DB pour une entite
 
 ## Objectif
 
-Générer les fonctions CRUD asyncpg et leurs tests pour UNE entité. Chaque fonction = une requête SQL paramétrée.
+Generer les fonctions CRUD asyncpg et leurs tests pour UNE entite. Chaque fonction = une requete SQL parametree.
 
 ## Arguments attendus
 
-- `entity` : Nom de l'entité (ex: "property")
+- `entity` : Nom de l'entite (ex: "property")
 - `architecture_path` : Chemin vers architecture (ex: `docs/architecture/backend`)
 - `backend_path` : Chemin vers le backend (ex: `dev/backend`)
 
 ## Process
 
-### 1. Lire les specs
+### 1. Lire les regles et specs
 
-1. `{backend_path}/../config/config.py` — **OBLIGATOIRE EN PREMIER** — pattern Settings
-2. `{architecture_path}/business-logic/{entity}.md` — Section CRUD (signatures, paramètres, retours)
-3. `{architecture_path}/schema.md` — Tables et colonnes (section entité)
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques CRUD (operations DB atomiques, parameterized queries, asyncpg patterns)
+- Obligatoire : architecture en couches (conventions de nommage, structure fichiers)
+- Conseille : bonnes pratiques database (schema, indexation) si besoin de comprendre la table
+
+**Specs projet** :
+1. `{backend_path}/../config/config.py` — **EN PREMIER** — pattern Settings
+2. `{architecture_path}/business-logic/{entity}.md` — Section CRUD (signatures, parametres, retours)
+3. `{architecture_path}/schema.md` — Tables et colonnes (section entite)
 4. Templates : `.claude/resources/templates/code/backend/`
 
-### 2. Générer CRUD (`crud/{entity}.py`)
+### 2. Generer CRUD (`crud/{entity}.py`)
 
 Pour chaque fonction CRUD dans business-logic :
 
@@ -61,13 +67,16 @@ async def list_{entities}(pool: asyncpg.Pool, page: int = 1, limit: int = 20, **
 
 **Patterns** : asyncpg pool, parameterized queries ($1, $2), dict(row) returns.
 
-### 3. Générer Tests (`tests/test_crud/test_{entity}.py`)
+**Nommage** : PAS de suffixes de couche (`_crud`), mais garder le contexte entite. `create_user()` et non `create_user_crud()` ni `create()`.
+
+### 3. Generer Tests (`tests/test_crud/test_{entity}.py`)
 
 ```python
 import pytest
+from app.database.crud.{entity} import create_{entity}, get_{entity}_by_id, list_{entities}, update_{entity}, delete_{entity}
 
 @pytest.mark.asyncio
-async def test_create_{entity}(pool):
+async def test_create(pool):
     result = await create_{entity}(pool, name="Test", ...)
     assert result["name"] == "Test"
     assert result["id"] is not None
@@ -100,17 +109,18 @@ async def test_delete_{entity}(pool):
     assert fetched is None
 ```
 
-Tester TOUTES les fonctions CRUD définies dans la business-logic, pas seulement les basiques.
+Tester TOUTES les fonctions CRUD definies dans la business-logic, pas seulement les basiques.
 
 ## Output
 
 - `{backend_path}/app/database/crud/{entity}.py`
 - `{backend_path}/tests/test_crud/test_{entity}.py`
 
-## Règles strictes
+## Regles strictes
 
-- NE PAS modifier d'autres fichiers que ceux de cette entité
+- NE PAS modifier d'autres fichiers que ceux de cette entite
 - Suivre les signatures EXACTEMENT comme dans business-logic
+- PAS de suffixes de couche (`_crud`), mais garder le contexte entite (`create_user`, pas `create`)
 - snake_case pour tout
 - Configuration : `from config.config import settings`, JAMAIS `os.environ`
 - Parameterized queries ($1, $2) — JAMAIS de f-string SQL

@@ -22,8 +22,13 @@ Générer 2 fichiers depuis le schema d'architecture :
 
 ## Process
 
-### 1. Lire le schema
+### 1. Lire les regles et le schema
 
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques database (schema, normalisation, indexation)
+- Conseille : architecture en couches (comprendre que models.py est de la documentation, les requetes passent par asyncpg)
+
+**Schema** :
 Lire `{schema_path}` → extraire pour chaque table :
 - Nom, colonnes (nom, type SQL, contraintes), relations (FK), indexes, CHECK constraints
 

@@ -22,11 +22,16 @@ Générer les services, types, hooks et composants frontend pour UNE entité dep
 
 ## Process
 
-### 1. Lire les specs
+### 1. Lire les regles et specs
 
-1. `{api_path}` — Endpoints REST (méthodes, params, responses)
-2. `{frontend_arch_path}` — Section de l'entité (pages, composants, endpoints mappés)
-3. Si des composants sont marqués **Référence** dans l'architecture → lire le code source dans `.claude/resources/templates/projects/{project}/` pour s'en inspirer
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques frontend (design system Tailwind, theming, erreurs courantes, checklist)
+- Conseille : bonnes pratiques API (comprendre les formats de reponse pour les types TypeScript)
+
+**Specs projet** :
+1. `{api_path}` — Endpoints REST (methodes, params, responses)
+2. `{frontend_arch_path}` — Section de l'entite (pages, composants, endpoints mappes)
+3. Si des composants sont marques **Reference** dans l'architecture → lire le code source dans `.claude/resources/templates/projects/{project}/` pour s'en inspirer
 
 ### 2. Générer Types (`services/{entity}/types.ts`)
 

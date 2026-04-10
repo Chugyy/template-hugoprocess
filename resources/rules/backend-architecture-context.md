@@ -10,11 +10,11 @@
 ┌─────────────────────────────────────────┐
 │         COUCHE API (Endpoints)          │  ← Routes FastAPI + Pydantic models
 │  - Validation inputs/outputs            │
-│  - Délègue à Jobs ou fonctions pures    │
+│  - Delegue a Jobs ou CRUD direct        │
 └─────────────────────────────────────────┘
                   ↓
 ┌─────────────────────────────────────────┐
-│         COUCHE JOBS (Business Logic)    │  ← Orchestration logique métier
+│         COUCHE JOBS (Business Logic)    │  ← Orchestration logique metier
 │  - Workflows avec fonctions pures       │
 │  - Combine CRUD + Utils + Services      │
 └─────────────────────────────────────────┘
@@ -22,16 +22,16 @@
 ┌────────────────┬────────────────────────┐
 │ FONCTIONS PURES                         │
 ├────────────────┼────────────────────────┤
-│ CRUD (DB)      │ Services (Externes)    │  ← Fonctions atomiques réutilisables
-│ - create_X()   │ - send_email()         │
-│ - get_X()      │ - upload_photo()       │
-│ - update_X()   │ - call_stripe()        │
-│ - delete_X()   │                        │
+│ CRUD (DB)      │ Services (Externes)    │  ← Fonctions atomiques reutilisables
+│ - create_user()│ - send_email()         │
+│ - get_user()   │ - upload_photo()       │
+│ - update_user()│ - create_customer()    │
+│ - delete_user()│                        │
 ├────────────────┤                        │
 │ Utils (Logic)  │                        │
-│ - validate_X() │                        │
-│ - format_X()   │                        │
-│ - hash_X()     │                        │
+│ - validate_email()                      │
+│ - format_phone()                        │
+│ - calculate_total()                     │
 └────────────────┴────────────────────────┘
                   ↓
 ┌─────────────────────────────────────────┐
@@ -41,164 +41,190 @@
 
 ---
 
-## Définitions
+## Definitions
 
 ### CRUD (Database Layer)
-**Rôle** : Opérations atomiques sur la base de données
+**Role** : Operations atomiques sur la base de donnees
 
 **Exemples** :
-- `create_user_crud(email, password_hash, name)` → INSERT user
-- `get_user_by_id_crud(user_id)` → SELECT user WHERE id
-- `update_property_crud(property_id, **fields)` → UPDATE property
-- `delete_order_crud(order_id)` → DELETE order
+- `create_user(email, password_hash, name)` dans `crud/user.py`
+- `get_user_by_id(user_id)` dans `crud/user.py`
+- `update_property(property_id, **fields)` dans `crud/property.py`
+- `delete_order(order_id)` dans `crud/order.py`
 
-**Caractéristiques** :
-- Une fonction = une requête SQL
-- Retourne dict Python (pas de logique métier)
-- Gère uniquement la persistence
+**Caracteristiques** :
+- Une fonction = une requete SQL
+- Retourne dict Python (pas de logique metier)
+- Gere uniquement la persistence
 
 ---
 
 ### Services (External Layer)
-**Rôle** : Interactions avec APIs tierces ou libraries externes
+**Role** : Interactions avec APIs tierces ou libraries externes
 
 **Exemples** :
-- `send_email_service(to, subject, body)` → Appel SMTP/SendGrid
-- `upload_photo_service(file_data, bucket)` → Appel S3/Cloudinary
-- `charge_payment_service(amount, card_token)` → Appel Stripe
-- `geocode_address_service(address)` → Appel Google Maps API
+- `send_email(to, subject, body)` dans `services/email.py`
+- `upload_file(file_data, bucket)` dans `services/storage.py`
+- `charge_payment(amount, card_token)` dans `services/stripe.py`
+- `geocode_address(address)` dans `services/maps.py`
 
-**Caractéristiques** :
+**Caracteristiques** :
 - Client/wrapper autour d'API externe
-- Gère authentification/retry/erreurs externes
-- Pas de logique métier (juste appel)
+- Gere authentification/retry/erreurs externes
+- Pas de logique metier (juste appel)
 
 ---
 
 ### Utils (Pure Logic)
-**Rôle** : Fonctions utilitaires réutilisables (validation, transformation, calcul)
+**Role** : Fonctions utilitaires reutilisables (validation, transformation, calcul)
 
 **Exemples** :
-- `validate_email(email)` → Regex validation
-- `hash_password(password)` → bcrypt
-- `format_phone(phone)` → Normalize format
-- `calculate_discount(price, percentage)` → Math
+- `validate_email(email)` dans `utils/user.py`
+- `hash_password(password)` dans `utils/user.py`
+- `format_phone(phone)` dans `utils/contact.py`
+- `calculate_discount(price, percentage)` dans `utils/order.py`
 
-**Caractéristiques** :
-- Pures (input → output, pas d'effet de bord)
-- Réutilisables partout
-- Pas d'accès DB ou API
+**Caracteristiques** :
+- Pures (input -> output, pas d'effet de bord)
+- Reutilisables partout
+- Pas d'acces DB ou API
 
 ---
 
 ### Jobs (Business Logic)
-**Rôle** : Orchestration de fonctions pures pour créer workflows métier complets
+**Role** : Orchestration de fonctions pures pour creer workflows metier complets
 
-**Exemples** :
+**Exemple** :
 ```python
-async def create_user_job(dto: UserCreateDTO) -> UserResponse:
+# jobs/user.py
+
+from app.database.crud.user import create_user
+from app.core.utils.user import validate_email, hash_password
+from app.core.services.email import send_email
+
+async def register(pool, email: str, password: str, name: str) -> dict:
     """
-    Workflow: Créer utilisateur avec email de bienvenue
+    Workflow: Creer utilisateur avec email de bienvenue
 
     Steps:
     1. Valider email (Utils)
     2. Hasher password (Utils)
-    3. Créer en DB (CRUD)
+    3. Creer en DB (CRUD)
     4. Envoyer email bienvenue (Service)
     """
-    # 1. Validation
-    if not validate_email(dto.email):
+    if not validate_email(email):
         raise ValueError("Email invalide")
 
-    # 2. Hash password
-    hashed = hash_password(dto.password)
+    hashed = hash_password(password)
 
-    # 3. Create in DB
-    user = await create_user_crud(dto.email, hashed, dto.name)
+    user = await create_user(pool, email=email, password_hash=hashed, name=name)
 
-    # 4. Send welcome email
-    await send_email_service(user['email'], "Welcome!", "...")
+    await send_email(to=user["email"], subject="Welcome!", body="...")
 
-    return UserResponse(**user)
+    return user
 ```
 
-**Caractéristiques** :
+**Caracteristiques** :
 - Combine plusieurs fonctions pures
-- Contient conditions/validations métier
-- Gère transactions si multi-CRUD
-- Retourne DTO Pydantic
+- Contient conditions/validations metier
+- Gere transactions si multi-CRUD
+- Retourne dict ou DTO Pydantic
 
 ---
 
-## Règle de Décision : Job vs CRUD vs Service
+## Regle de Decision : Job vs CRUD direct vs Service direct
 
 ### Utiliser **Job** si :
-- ✅ Logique métier complexe (validation + transformation + orchestration)
-- ✅ Combine plusieurs fonctions pures (CRUD + Utils + Services)
-- ✅ Workflow avec conditions/branches
-- ✅ Transaction multi-étapes
+- Logique metier complexe (validation + transformation + orchestration)
+- Combine plusieurs fonctions pures (CRUD + Utils + Services)
+- Workflow avec conditions/branches
+- Transaction multi-etapes
 
 **Exemples** :
-- `create_order_with_payment_job` → Valider stock + créer commande + charger paiement + envoyer confirmation
-- `update_property_with_notification_job` → Valider data + update DB + notifier propriétaire
+- `register` dans `jobs/user.py` → valider + hasher + creer + envoyer email
+- `place_order` dans `jobs/order.py` → valider stock + creer commande + charger paiement + notifier
 
 ---
 
 ### Utiliser **CRUD direct** si :
-- ✅ Opération DB simple et atomique
-- ✅ Aucune logique métier (juste lecture/écriture)
-- ✅ Pas de validation complexe (Pydantic suffit)
+- Operation DB simple et atomique
+- Aucune logique metier (juste lecture/ecriture)
+- Pas de validation complexe (Pydantic suffit)
 
 **Exemples** :
-- `GET /api/users/{id}` → `get_user_by_id_crud`
-- `GET /api/properties?status=active` → `list_properties_crud`
-- `DELETE /api/orders/{id}` → `delete_order_crud`
+- `GET /api/users/{id}` → `crud/user.py:get_user_by_id`
+- `GET /api/properties?status=active` → `crud/property.py:list_properties`
+- `DELETE /api/orders/{id}` → `crud/order.py:delete_order`
 
 ---
 
 ### Utiliser **Service direct** si :
-- ✅ Appel externe simple (upload, email, SMS)
-- ✅ Aucune orchestration nécessaire
-- ✅ Action indépendante
+- Appel externe simple (upload, email, SMS)
+- Aucune orchestration necessaire
+- Action independante
 
 **Exemples** :
-- `POST /api/files/upload` → `upload_file_service`
-- `POST /api/notifications/sms` → `send_sms_service`
+- `POST /api/files/upload` → `services/storage.py:upload_file`
+- `POST /api/notifications/sms` → `services/sms.py:send_sms`
 
 ---
 
 ## Conventions de Nommage
 
-### Fonctions Python (snake_case)
+### PAS de suffixes de couche, OUI au contexte entite
 
-**Jobs** : `{action}_{resource}_job`
-- `create_user_job`
-- `update_property_job`
-- `cancel_order_job`
+Le suffixe de couche (`_crud`, `_job`, `_service`) est inutile — le dossier le dit deja.
+Mais le nom de l'entite/action DOIT etre dans le nom de la fonction pour la lisibilite au call site.
 
-**CRUD** : `{action}_{resource}_crud`
-- `create_user_crud`
-- `get_property_by_id_crud`
-- `list_orders_crud`
+```
+# CORRECT — contexte clair, pas de suffixe de couche
+crud/user.py       → create_user(), get_user_by_id(), list_users()
+crud/order.py      → create_order(), delete_order()
+jobs/user.py       → register(), update_profile()
+jobs/order.py      → place_order(), cancel_order()
+services/email.py  → send_email(), send_welcome()
+services/stripe.py → charge_payment(), create_customer()
+utils/user.py      → validate_email(), hash_password()
+utils/order.py     → calculate_total(), validate_order_data()
 
-**Services** : `{action}_{service}`
-- `send_email_service`
-- `upload_photo_service`
-- `charge_payment_service`
+# INCORRECT — suffixes de couche inutiles
+crud/user_crud.py  → create_user_crud()
+jobs/user_job.py   → register_user_job()
+services/email_service.py → send_email_service()
 
-**Utils** : `{verb}_{object}`
-- `validate_email`
-- `hash_password`
-- `format_phone`
+# INCORRECT — trop generique, illisible au call site
+crud/user.py       → create(), get_by_id()
+services/email.py  → send()
+```
 
-### Schémas Pydantic (snake_case → camelCase)
+### Structure de fichiers : dossier vs fichier plat
 
-**⚠️ RÈGLE CRITIQUE : Python snake_case, JSON camelCase**
+**Un seul fichier** → fichier plat a la racine du dossier de couche :
+```
+services/
+├── email.py          # Un seul fichier pour email
+├── stripe.py         # Un seul fichier pour stripe
+```
+
+**Plusieurs fichiers lies** → sous-dossier :
+```
+services/
+├── email.py          # Simple, un fichier suffit
+└── youtube/          # Complexe, plusieurs fichiers
+    ├── __init__.py
+    ├── scraper.py
+    ├── oauth.py
+    └── pipeline.py
+```
+
+Regle : des qu'un module necessite 2+ fichiers, creer un dossier. Ne jamais prefixer avec le nom du module (`youtube_scraper.py`, `youtube_oauth.py`).
+
+### Schemas Pydantic (snake_case → camelCase)
 
 **Code Python** : TOUJOURS `snake_case` (PEP-8)
 ```python
 class UserResponse(BaseModel):
-    first_name: str      # ✅ Python: snake_case
+    first_name: str
     last_name: str
     created_at: datetime
 ```
@@ -218,49 +244,37 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 class BaseSchema(BaseModel):
-    """Base pour tous les schémas Pydantic avec conversion camelCase"""
     model_config = ConfigDict(
-        alias_generator=to_camel,        # Python → JSON conversion
-        populate_by_name=True,           # Accepte snake_case ET camelCase en input
-        from_attributes=True,            # Permet .model_validate(orm_obj)
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True,
     )
-
-class UserResponse(BaseSchema):  # ✅ Hérite de BaseSchema
-    first_name: str
-    last_name: str
 ```
-
-**IMPORTANT** :
-- ✅ Code Python : `first_name` (snake_case)
-- ✅ JSON Response : `firstName` (camelCase)
-- ✅ Frontend TypeScript : `firstName` (camelCase natif)
-- ❌ Ne JAMAIS écrire `firstName` en Python (anti-PEP-8)
-
-**Disponible dans** : `app/api/models/common.py` → `BaseSchema`
 
 ---
 
 ## Exemples Pratiques
 
-| Endpoint | Function | Type | Raison |
-|----------|----------|------|--------|
-| POST /api/users | create_user_job | Job | Validation + hash + create + email |
-| GET /api/users/{id} | get_user_by_id_crud | CRUD | Simple lecture DB |
-| PUT /api/users/{id} | update_user_job | Job | Validation + update + notification |
-| DELETE /api/users/{id} | delete_user_crud | CRUD | Simple delete DB |
-| POST /api/orders | create_order_with_payment_job | Job | Valider stock + créer + payer + notifier |
-| GET /api/orders | list_orders_crud | CRUD | Simple liste avec filtres |
-| POST /api/files/upload | upload_file_service | Service | Appel direct S3/Cloudinary |
+| Endpoint | Fonction | Fichier | Type | Raison |
+|----------|----------|---------|------|--------|
+| POST /api/users | register | jobs/user.py | Job | Validation + hash + create + email |
+| GET /api/users/{id} | get_user_by_id | crud/user.py | CRUD | Simple lecture DB |
+| PUT /api/users/{id} | update_profile | jobs/user.py | Job | Validation + update + notification |
+| DELETE /api/users/{id} | delete_user | crud/user.py | CRUD | Simple delete DB |
+| POST /api/orders | place_order | jobs/order.py | Job | Valider stock + creer + payer + notifier |
+| GET /api/orders | list_orders | crud/order.py | CRUD | Simple liste avec filtres |
+| POST /api/files/upload | upload_file | services/storage.py | Service | Appel direct S3/Cloudinary |
 
 ---
 
-## Points Clés
+## Points Cles
 
 1. **Jobs = orchestration** (combine fonctions pures)
-2. **CRUD = persistence** (une fonction = une requête SQL)
+2. **CRUD = persistence** (une fonction = une requete SQL)
 3. **Services = external** (APIs tierces)
-4. **Utils = logic** (fonctions pures réutilisables)
-
-5. **Endpoints API délèguent toujours** à Job OU fonction pure (jamais de logique inline)
-
-6. **Fonctions pures sont réutilisables** entre différents Jobs
+4. **Utils = logic** (fonctions pures reutilisables)
+5. **Endpoints API deleguent toujours** a Job OU fonction pure (jamais de logique inline)
+6. **Fonctions pures sont reutilisables** entre differents Jobs
+7. **Pas de suffixes de couche** (`_crud`, `_job`, `_service`), mais garder le contexte entite dans le nom
+8. **Dossier si 2+ fichiers** : ne jamais prefixer les fichiers avec le nom du module
+9. **Combiner les entites proches** : une entite satellite (log, historique, config) vit dans le fichier de son entite parent

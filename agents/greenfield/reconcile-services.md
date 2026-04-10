@@ -20,8 +20,14 @@ Lire TOUS les rapports produits par les agents `build-service`, consolider les c
 
 ## Process
 
-### 1. Collecter les rapports
+### 1. Lire les regles et collecter les rapports
 
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques database (schema, migrations, indexation)
+- Obligatoire : architecture en couches (comprendre les impacts sur CRUD et jobs)
+- Conseille : bonnes pratiques services (comprendre ce que les rapports de services decrivent)
+
+**Rapports** :
 Lire tous les fichiers `{backend_path}/reports/service-*.md`
 
 Pour chaque rapport, extraire :

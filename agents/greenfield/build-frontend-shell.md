@@ -20,13 +20,17 @@ Générer la structure globale du frontend : layout, sidebar, navigation, pages,
 
 ## Process
 
-### 1. Lire les inputs
+### 1. Lire les regles et inputs
 
-1. `{frontend_arch_path}` — Layout global, pages, navigation, rôles
-2. Lister `{frontend_path}/src/services/*/` — Entités déjà codées
-3. Lister `{frontend_path}/src/components/*/` — Composants déjà créés
+**Regles** (via `.claude/resources/rules/index.md`) :
+- Obligatoire : bonnes pratiques frontend (design system Tailwind, theming, erreurs courantes, checklist)
+
+**Inputs projet** :
+1. `{frontend_arch_path}` — Layout global, pages, navigation, roles
+2. Lister `{frontend_path}/src/services/*/` — Entites deja codees
+3. Lister `{frontend_path}/src/components/*/` — Composants deja crees
 4. Lister `{frontend_path}/src/components/ui/` — Composants shadcn disponibles
-5. Si des composants layout sont marqués **Référence** dans l'architecture → lire le code source dans `.claude/resources/templates/projects/{project}/` pour s'en inspirer (ex: AppShell, Sidebar, Header depuis `dashboard-crm`)
+5. Si des composants layout sont marques **Reference** dans l'architecture → lire le code source dans `.claude/resources/templates/projects/{project}/`
 
 ### 2. Générer Layout (`app/layout.tsx`)
 

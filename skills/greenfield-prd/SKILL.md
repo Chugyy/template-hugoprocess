@@ -1,9 +1,9 @@
 ---
 name: greenfield-prd
 description: >
-  Brainstorming conversationnel + PRD adaptatif. 2 checkpoints humains :
-  brainstorming (crescendo de questions) et PRD (overview non-technique).
-  Detecte le scope du projet et ne genere que les sections pertinentes.
+  Brainstorming conversationnel + PRD adaptatif. 1 checkpoint brainstorming,
+  1 checkpoint PRD. Detecte scope (standalone/full-stack) et complexite
+  (compact/split) pour adapter le format de sortie.
 allowed-tools: Read, Write
 model: opus
 user-invocable: true
@@ -14,17 +14,13 @@ disable-model-invocation: false
 
 # De l'idee au PRD
 
-2 checkpoints humains. Le reste est silencieux — les documents sont produits pour le LLM, l'humain interagit via des overviews non-techniques.
-
-> **REGLE** : Quand le PRD mentionne des services externes (APIs, SDKs) ou des variables d'env, TOUJOURS lister les choix de services et demander validation a l'utilisateur AVANT de finaliser le document.
+2 checkpoints humains. Le reste est silencieux.
 
 ---
 
 ## CHECKPOINT 1 — Brainstorming conversationnel
 
 **Objectif** : Comprendre l'intention de l'utilisateur en profondeur via une conversation crescendo.
-**Output** : `docs/brainstorming.md`
-**Template** : `.claude/resources/templates/docs/bmad/brainstorming-output-tmpl.yaml`
 
 ### Approche
 
@@ -54,18 +50,25 @@ Conversation naturelle, pas un formulaire. Monter crescendo :
 
 Le LLM utilise SCAMPER, 5 Whys, First Principles en interne pour structurer sa comprehension. Il ne les mentionne PAS a l'utilisateur.
 
-### Detection de scope
+### Detection de scope et complexite
 
-Pendant le brainstorming, le LLM identifie silencieusement le **scope du projet** :
+Pendant le brainstorming, le LLM identifie silencieusement :
+
+**Scope :**
 
 | Scope | Description | Exemple |
 |-------|-------------|---------|
 | `full-stack` | App complete (backend + frontend + DB, ou sous-ensemble) | App web, API seule, dashboard |
 | `standalone` | Pas d'app — scripts, prompts, docs, outils | Serie de prompts, CLI tool, automation |
 
-Note : le mode **feature** (ajout a un projet existant) ne passe PAS par le PRD. Il a son propre process (voir CLAUDE.md section "Mode Feature").
+**Complexite (si full-stack) :**
 
-Le scope `full-stack` s'adapte naturellement : si le projet n'a pas de frontend, le PRD ne generera pas d'UI tree. Si pas de backend, pas de jobs. Le LLM detecte ce qui est pertinent.
+| Mode | Condition | Format de sortie |
+|------|-----------|-----------------|
+| `compact` | Peu de complexite : ≤ 3 entites, pas de roles multiples, peu de services externes | Un seul `prd.md` complet |
+| `split` | Complexite significative : 4+ entites, OU roles multiples, OU 2+ services externes, OU flows conditionnels | `prd.md` + `requirements.md` + `user-stories.md` + `ui-tree.md` |
+
+C'est un jugement contextuel, pas un seuil rigide. Un projet avec 3 entites mais des workflows complexes avec conditions peut justifier un split.
 
 ### Validation
 
@@ -74,93 +77,130 @@ Quand le LLM estime avoir assez de matiere :
   - "Ton projet c'est {resume}. Il permet a {users} de {action principale}."
   - "Le MVP inclut : {liste courte}"
   - "Ce qu'on garde pour plus tard : {liste courte}"
-  - **"Scope detecte : {scope}"** — l'utilisateur valide ou corrige
+  - **"Scope : {scope}, Mode : {compact/split}"**
 - L'utilisateur valide ou ajuste
-- Ecrire `docs/brainstorming.md` (inclut le scope detecte)
+- Passer au CHECKPOINT 2
 
 ---
 
-## Phase silencieuse — Brief + Stories + UI Tree (adaptatif)
+## CHECKPOINT 2 — PRD
 
-**Objectif** : Produire les documents intermediaires sans validation individuelle.
+**Objectif** : Generer le(s) document(s) et presenter un overview non-technique.
 
-Le LLM enchaine ces phases automatiquement apres validation du brainstorming. **Les sections generees dependent du scope detecte.**
+### Mode standalone
 
-### Brief (`docs/brief.md`) — TOUJOURS
+Generer `docs/prd.md` avec :
+- Vision et contexte
+- Livrables attendus (fichiers/outputs avec description)
+- Contraintes
+- `docs/for-later.md`
 
-**Template** : `.claude/resources/templates/docs/bmad/project-brief-tmpl.yaml`
+### Mode compact (full-stack, faible complexite)
 
-Remplir les 10 sections depuis le brainstorming :
-1. Executive Summary
-2. Problem Statement
-3. Proposed Solution
-4. Target Users
-5. Goals & Metrics
-6. MVP Scope
-7. Post-MVP Vision
-8. Technical Considerations
-9. Constraints & Assumptions
-10. Risks & Open Questions
+Generer un seul `docs/prd.md` contenant TOUT :
 
-### User Stories (integrees dans le PRD) — SI scope = full-stack
+**Template** : `.claude/resources/templates/docs/prd.md`
 
-Organiser par **parcours utilisateur complet** (pas par feature) :
-- Chaque role a son bloc
-- Numerotation sequentielle au sein de chaque parcours
-- Format : "{Role} fait {action} → {resultat visible}"
+Sections :
+1. **Goals & Background** — Contexte, objectifs, entites metier, scope
+2. **Functional Requirements** — FR avec flows conditionnels si necessaire (voir syntaxe ci-dessous)
+3. **User Stories** — Parcours par role avec branches
+4. **UI Tree** — Arborescence de l'interface (si frontend)
+5. **Non-Functional Requirements** — Performance, securite
+
++ `docs/for-later.md`
+
+### Mode split (full-stack, complexite significative)
+
+Generer 4 documents + for-later :
+
+**`docs/prd.md`** — Document cadre (leger)
+- Goals & Background
+- Entites metier identifiees
+- Scope et mode detectes
+- Non-Functional Requirements
+- Pointe vers les autres documents
+
+**`docs/requirements.md`** — Functional Requirements detailles
+- FR groupes par entite
+- Flows conditionnels (syntaxe SI/SINON)
+- Priorites (Must-have / Should-have / Nice-to-have)
+
+**`docs/user-stories.md`** — Parcours utilisateur
+- Organises par role
 - Ordre chronologique reel
-- Couvrir cas nominaux + transitions
+- Branches conditionnelles
 
-**Si scope = standalone** : remplacer par une section "Livrables" listant les fichiers/outputs attendus avec leur description.
+**`docs/ui-tree.md`** — Arbre UI (si frontend)
+- Arborescence des pages et composants
+- Etats conditionnels (premium vs free, connecte vs anonyme)
+- Actions et navigations
 
-### UI Tree (integre dans le PRD) — SI le projet a un frontend
+**`docs/for-later.md`** — Post-MVP
 
-Genere uniquement si le projet inclut un frontend (detecte pendant le brainstorming).
+### Syntaxe des flows conditionnels
 
-Arborescence complete de l'interface :
+Dans les FR et user stories, utiliser cette syntaxe pour les branches :
+
+```markdown
+**FR3** — Reservation d'un logement
+
+1. Verifier les disponibilites
+2. Calculer le prix total
+3. **SI** le client a un abonnement premium :
+   a. Appliquer la reduction abonne
+   b. Utiliser le moyen de paiement enregistre
+4. **SINON** :
+   a. Rediriger vers le formulaire de paiement
+   b. Attendre la confirmation du paiement
+5. **SI** le paiement est confirme :
+   a. Bloquer les dates
+   b. Notifier le proprietaire
+   c. Envoyer la confirmation au client
+6. **SINON** :
+   a. Enregistrer l'echec
+   b. Notifier le client de l'echec
+→ Resultat : reservation confirmee OU echec avec notification
+```
+
+Meme syntaxe pour les user stories :
+
+```markdown
+▸ Quand un client reserve un logement :
+  1. Il choisit les dates et le logement
+  2. Il voit le prix total calcule
+  3. SI il est abonne premium :
+     a. Le prix reduit s'affiche
+     b. Il confirme en un clic (paiement enregistre)
+  4. SINON :
+     a. Il remplit le formulaire de paiement
+     b. Il attend la confirmation Stripe
+  5. Il recoit un email de confirmation
+  → Resultat visible : page "Mes reservations" avec la nouvelle reservation
+```
+
+Et pour l'UI tree, les etats conditionnels :
+
 ```
 App
-├── /route
-│   ├── Section
-│   │   ├── Element (description du contenu)
-│   │   └── Action → Modale/Navigation
-│   │       ├── Contenu de la modale (champs, boutons)
-│   │       └── Resultat de l'action
+├── /bookings
+│   ├── Liste des reservations
+│   │   ├── [SI role=client] Mes reservations uniquement
+│   │   └── [SI role=owner] Reservations de mes logements
+│   ├── Bouton "Reserver" → /bookings/new
+│   └── Filtre par statut (confirmee, en attente, annulee)
+├── /bookings/new
+│   ├── Formulaire dates + logement
+│   ├── Resume prix
+│   │   ├── [SI premium] Prix reduit + badge "Abonne"
+│   │   └── [SI standard] Prix normal
+│   ├── [SI premium] Bouton "Confirmer" (paiement auto)
+│   └── [SI standard] Formulaire paiement Stripe
 ```
 
-Chaque element interactif indique ce qu'il declenche. Chaque modale liste ses champs et boutons. Assez detaille pour qu'un developpeur construise chaque page.
+### Presentation a l'utilisateur (non-technique)
 
-**Si pas de frontend** : remplacer par une section "API Overview" listant les endpoints principaux et leur role.
-**Si scope = standalone** : ne pas generer cette section.
-
----
-
-## CHECKPOINT 2 — PRD overview
-
-**Objectif** : Presenter le PRD de maniere non-technique pour validation finale.
-**Output** : `docs/prd.md`, `docs/for-later.md`
-**Template PRD** : `.claude/resources/templates/docs/bmad/prd-tmpl.yaml`
-**Template for-later** : `.claude/resources/templates/docs/for-later.md`
-
-### Le document PRD (adaptatif)
-
-Sections generees selon ce que le projet inclut :
-
-| Section | full-stack | standalone |
-|---------|-----------|-----------|
-| Goals & Background | OUI | OUI |
-| User Stories | OUI (si users) | NON (Livrables) |
-| UI Tree | SI frontend | NON |
-| API Overview | SI backend sans frontend | NON |
-| Functional Requirements | OUI | OUI |
-| Non-Functional Requirements | OUI | Optionnel |
-| UI Design Goals | SI frontend | NON |
-
-Le scope est indique en haut du PRD : `**Scope** : {scope}`
-
-### La presentation a l'utilisateur (non-technique)
-
-**Ne PAS presenter le doc brut.** Presenter un overview adapte :
+**Ne PAS presenter le(s) doc(s) brut(s).** Presenter un overview adapte :
 
 **Si full-stack (avec frontend) :**
 > "Ton app permet a {users} de {actions principales}."
@@ -182,37 +222,20 @@ Le scope est indique en haut du PRD : `**Scope** : {scope}`
 >
 > **Endpoints principaux :**
 > - {Endpoint 1} — {ce qu'il fait}
->
-> **Entites :**
-> - {Entity 1} : {description}
 
 **Si standalone :**
 > "Ce projet produit {livrables}."
 >
 > **Livrables :**
 > - {Livrable 1} — {description}
->
-> **Contraintes :**
-> - {Contrainte 1}
 
-Puis : "Le PRD detaille est dans `docs/prd.md` si tu veux checker. Sinon, on continue ?"
+Puis : "Le PRD est dans `docs/`. On continue ?"
 
-**L'utilisateur** : "OK" ou feedbacks, puis ajuster et ecrire `docs/prd.md` + `docs/for-later.md`
-
-### For Later (automatique)
-
-Collecter tous les elements post-MVP identifies :
-- Brainstorming : Future Innovations + Moonshots
-- Brief : Post-MVP Vision + Nice-to-have
-- Stories : hors scope POC
-- UI Tree : placeholders
-- PRD : FR Should-have / Nice-to-have
+**L'utilisateur** : "OK" ou feedbacks, puis ajuster et ecrire les documents.
 
 ---
 
 ## Fin du workflow — Next Step adaptatif
-
-Le next step depend du scope detecte :
 
 | Scope | Next Step | Raison |
 |-------|-----------|--------|
@@ -220,11 +243,22 @@ Le next step depend du scope detecte :
 | `standalone` | Execution directe | Pas besoin d'architecture — l'agent principal code le livrable |
 
 ```
-Livrables :
-- docs/brainstorming.md (inclut le scope detecte)
-- docs/brief.md
-- docs/prd.md (sections adaptees au projet)
-- docs/for-later.md (post-MVP)
+Livrables (selon le mode) :
+
+Mode compact :
+- docs/prd.md (tout dedans)
+- docs/for-later.md
+
+Mode split :
+- docs/prd.md (document cadre)
+- docs/requirements.md (FR avec flows conditionnels)
+- docs/user-stories.md (parcours par role)
+- docs/ui-tree.md (arbre UI si frontend)
+- docs/for-later.md
+
+Mode standalone :
+- docs/prd.md (minimal)
+- docs/for-later.md
 
 Next Step : depend du scope (voir tableau ci-dessus)
 ```

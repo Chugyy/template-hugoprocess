@@ -43,16 +43,24 @@
 
 **FR:** {FRN}
 **Declencheur:** {event ou schedule}
+**Type:** {Primaire (reutilisable) / Secondaire}
 
 **Workflow:**
 1. {Etape 1}
 2. {Etape 2}
+3. **SI** {condition} :
+   a. {Branche A - etape 1}
+   b. {Branche A - etape 2}
+4. **SINON** :
+   a. {Branche B - etape 1}
+5. {Etape commune}
 
 **Erreurs:**
 - `{ErrorType}` → {comportement}
 
 **Dependances:**
 - `{Entity}.{function}` [{type}]
+- {Si secondaire} `{job_primaire}` [Job]
 
 ---
 

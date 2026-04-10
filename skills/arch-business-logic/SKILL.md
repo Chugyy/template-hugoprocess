@@ -20,7 +20,7 @@ Generation silencieuse. Pas de checkpoint humain — la validation se fait au re
 1. Lire `docs/prd.md` — Si absent, STOP, lancer `/greenfield-prd`
 2. Lire `docs/architecture/backend/entities.md` — Si absent, STOP, lancer `/greenfield-jobs`
 3. Lire `docs/architecture/backend/fr-mapping.md` — Si absent, STOP, lancer `/greenfield-jobs`
-4. Lire `docs/research/index.md` — Si absent, c'est OK (pas de services externes)
+4. Lire `../lib/researches/` — Recherches services externes disponibles (si pertinent)
 5. Creer `docs/architecture/configs/` si absent
 
 ---
@@ -28,7 +28,7 @@ Generation silencieuse. Pas de checkpoint humain — la validation se fait au re
 ## Phase 1 — Generation (parallele, 1 agent par entite)
 
 **Agent** : `detail-business-logic-entity` (xN entites)
-**Input** : `docs/architecture/backend/fr-mapping.md` (section entite) + `docs/research/*.md` (si services externes)
+**Input** : `docs/architecture/backend/fr-mapping.md` (section entite) + `../lib/researches/*.md` (si services externes)
 **Contexte agent** : `.claude/resources/rules/best-practises-business-logic/`
 **Output markdown** : `docs/architecture/backend/business-logic/{entity}.md`
 **Output JSON** : `docs/architecture/configs/crud-{entity}.json` + `docs/architecture/configs/jobs-{entity}.json` (si jobs)
