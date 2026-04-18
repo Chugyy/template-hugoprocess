@@ -17,7 +17,7 @@ Creer un wrapper fonctionnel et teste pour UN service externe. Lire la documenta
 ## Arguments attendus
 
 - `service_name` : Nom du service (ex: "stripe", "apify", "whisper", "anthropic")
-- `research_path` : Chemin vers le fichier research du service dans la librairie partagee (ex: `../lib/researches/stripe.md`)
+- `research_path` : Chemin vers le fichier research du service (ex: `.claude/resources/researches/stripe.md`)
 - `architecture_path` : Chemin vers architecture (ex: `docs/architecture/backend`)
 - `backend_path` : Chemin vers le backend (ex: `dev/backend`)
 

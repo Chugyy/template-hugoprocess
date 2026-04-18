@@ -168,21 +168,26 @@ export function useDelete{Entity}() {
 }
 ```
 
-### 5. Installer les composants shadcn et Origin UI (si listés dans l'architecture)
+### 5. Installer les composants externes (si listés dans l'architecture)
 
-Depuis `frontend-architecture.md`, identifier les composants classifiés **shadcn** ou **Origin UI** pour cette entité :
+Depuis `frontend-architecture.md`, identifier les composants classifiés **shadcn**, **Registry**, ou **Origin UI** pour cette entité :
 
-1. **Récupérer les détails** du composant via le MCP correspondant (`shadcn` ou `origin-ui`)
-2. **Installer** via la commande fournie par l'architecture
+1. **Lire la classification** et la commande d'installation dans l'architecture
+2. **Installer** via CLI
 3. **Adapter** si nécessaire (renommer, ajuster les props pour l'entité)
 
 ```bash
-# shadcn
+# shadcn officiel
 cd {frontend_path} && npx shadcn@latest add {component_name}
+
+# Registry tiers (Dice UI, Magic UI, Animate UI, etc.)
+cd {frontend_path} && npx shadcn@latest add @namespace/composant
 
 # Origin UI
 cd {frontend_path} && npx shadcn@latest add {origin_ui_component_url}
 ```
+
+Les composants installés via registries héritent automatiquement du design du projet (couleurs, radius, fonts, dark mode) car ils utilisent les CSS variables locales.
 
 ### 6. Générer Composants spécifiques (`components/{entity}/*.tsx`)
 
@@ -194,6 +199,31 @@ Depuis `frontend-architecture.md` section de l'entité, créer les composants **
 - Autres composants spécifiques mentionnés dans l'architecture
 
 Utiliser les composants shadcn existants (`ui/*.tsx`) ET les composants Origin UI installés comme building blocks.
+
+#### Regles de styling STRICTES
+
+**Composition pure** : les composants composés assemblent les primitifs shadcn, ils n'inventent PAS de styling.
+
+```tsx
+// ✅ Composer les primitifs — zero styling ajouté
+<Card>
+  <CardHeader><CardTitle>{entity.name}</CardTitle></CardHeader>
+  <CardContent><Badge>{entity.status}</Badge></CardContent>
+</Card>
+
+// ❌ INTERDIT — styling inventé hors design system
+<div className="bg-white rounded-lg p-8 shadow-md">
+  <h3 className="text-lg font-bold text-gray-900 mb-2">...</h3>
+</div>
+```
+
+**Couleurs** : UNIQUEMENT via tokens semantiques (`bg-primary`, `text-foreground`, `bg-card`). JAMAIS de couleurs raw (`bg-blue-500`, `text-black`, `bg-white`, hex).
+
+**Spacing** : UNIQUEMENT `gap-*` pour espacer les enfants. JAMAIS `space-y-*`, `space-x-*`, ou `mb-*` entre sections. Les composants primitifs (Card, Button) gerent deja leur padding interne — ne pas en rajouter.
+
+**Layout via className** : `className` sur un composant shadcn sert UNIQUEMENT au layout (flex, grid, col-span, w-full). JAMAIS au style visuel (couleurs, padding, ombres).
+
+**Dark mode** : automatique via les CSS variables. Ne PAS ajouter de prefixes `dark:` sauf si documenté dans les best practices.
 
 ## Output
 

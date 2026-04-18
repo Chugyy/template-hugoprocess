@@ -271,16 +271,29 @@ source .venv/bin/activate
 python -m app.api.main
 ```
 
-### 1.4 Git init + push
+### 1.4 Git push
 
 Le repo Git est dans `dev/` (PAS a la racine du projet). Le repo contient `backend/`, `frontend/` et `.github/` a sa racine.
 
+**Verifier si un repo GitHub existe deja** :
 ```bash
 cd dev/
-git init
-git remote add origin {GITHUB_URL}
+git remote -v 2>/dev/null
+```
+
+**Si repo existe deja** (remote `origin` present) — ajouter les fichiers deploy et push :
+```bash
 git add backend/ frontend/ .github/
-git commit -m "Initial commit"
+git commit -m "Add deployment configuration"
+git push
+```
+
+**Si pas de repo** — en creer un :
+```bash
+git init
+gh repo create {repo_name} --private --source=. --push
+git add backend/ frontend/ .github/
+git commit -m "Initial commit with deployment"
 git push -u origin main
 ```
 

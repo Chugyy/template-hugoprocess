@@ -34,15 +34,17 @@ Générer la structure globale du frontend : layout, sidebar, navigation, pages,
 
 ### 2. Générer Layout (`app/layout.tsx`)
 
+Le layout utilise les tokens de spacing définis dans `globals.css`. Le padding du `<main>` utilise le token `--page-padding` via la classe `p-page`.
+
 ```tsx
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { {Font} } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/lib/providers';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 
-const inter = Inter({ subsets: ['latin'] });
+const font = {Font}({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
   title: '{App Name}',
@@ -51,14 +53,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr">
-      <body className={inter.className}>
+    <html lang="fr" suppressHydrationWarning>
+      <body className={`${font.variable} antialiased`}>
         <Providers>
           <div className="flex h-screen">
             <Sidebar />
             <div className="flex-1 flex flex-col">
               <Header />
-              <main className="flex-1 overflow-auto p-6">
+              <main className="flex-1 overflow-auto p-page">
                 {children}
               </main>
             </div>
@@ -69,6 +71,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 ```
+
+**IMPORTANT** : `p-page` est un token mappé dans `@theme inline` vers `--page-padding`. Ne PAS hardcoder `p-6` ou `p-8`.
 
 ### 3. Générer composants Layout
 
@@ -87,8 +91,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 Pour chaque page dans frontend-architecture :
 
 **Page liste** (`app/{entities}/page.tsx`) :
+
+Utiliser les composants layout `PageContainer`, `PageHeader`, `PageTitle`, `PageActions` depuis `ui/page-container.tsx`. Zéro padding hardcodé — tout vient des tokens.
+
 ```tsx
 import { use{Entities} } from '@/hooks/use-{entity}';
+import { PageContainer, PageHeader, PageTitle, PageActions } from '@/components/ui/page-container';
+import { Button } from '@/components/ui/button';
 // Importer composants de l'entité
 
 export default function {Entities}Page() {
@@ -99,10 +108,17 @@ export default function {Entities}Page() {
   if (!data?.data.length) return <EmptyState />;
 
   return (
-    <div>
-      <h1>{Entities}</h1>
-      {/* Utiliser les composants entity */}
-    </div>
+    <PageContainer>
+      <PageHeader>
+        <PageTitle>{Entities}</PageTitle>
+        <PageActions>
+          <Button>Create</Button>
+        </PageActions>
+      </PageHeader>
+      <div className="grid gap-component md:grid-cols-2 lg:grid-cols-3">
+        {/* Utiliser les composants entity */}
+      </div>
+    </PageContainer>
   );
 }
 ```
@@ -110,10 +126,19 @@ export default function {Entities}Page() {
 **Page détail** (`app/{entities}/[id]/page.tsx`) :
 ```tsx
 import { use{Entity} } from '@/hooks/use-{entity}';
+import { PageContainer, PageHeader, PageTitle } from '@/components/ui/page-container';
 
 export default function {Entity}DetailPage({ params }: { params: { id: string } }) {
   const { data, isLoading } = use{Entity}(Number(params.id));
-  ...
+
+  return (
+    <PageContainer>
+      <PageHeader>
+        <PageTitle>{data?.name}</PageTitle>
+      </PageHeader>
+      {/* Composants entity */}
+    </PageContainer>
+  );
 }
 ```
 
@@ -186,3 +211,13 @@ export const config = {
 - Server Components par défaut (Next.js App Router)
 - **Suspense boundary** : Tout composant utilisant `useSearchParams()` DOIT être wrappé dans `<Suspense>` (exigence Next.js App Router). Créer un inner component client si nécessaire.
 - **Middleware** : Toujours générer `middleware.ts` avec exclusion de `/api`, `/login`, `/register` et des routes publiques.
+
+### Regles de styling STRICTES
+
+- **Padding du layout** : `p-page` sur le `<main>`, JAMAIS `p-6` ou `p-8` hardcode
+- **Composants layout** : utiliser `PageContainer`, `PageHeader`, `PageTitle`, `PageActions` pour structurer les pages. NE PAS creer de `<div>` avec du padding/margin invente
+- **Spacing entre sections** : `gap-section` sur le parent. JAMAIS `mb-*` sur les enfants
+- **Spacing entre composants** : `gap-component` dans les grids/flex. JAMAIS `space-y-*`
+- **Couleurs** : UNIQUEMENT via tokens (`bg-background`, `text-foreground`, etc.). JAMAIS de couleurs raw (`bg-white`, `text-black`, `bg-blue-500`)
+- **Dark mode** : automatique via CSS variables. NE PAS ajouter de `dark:` sauf cas specifique
+- **className sur shadcn** : sert UNIQUEMENT au layout (flex, grid, col-span, w-full). JAMAIS au style visuel

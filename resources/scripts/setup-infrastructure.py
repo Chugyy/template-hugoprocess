@@ -380,108 +380,212 @@ def setup_backend(backend_path, template_path, app_name, db_name, create_admin=F
 
 
 # =====================================================
-# Frontend Setup
+# Frontend Setup (shadcn preset + custom infra injection)
 # =====================================================
-def setup_frontend(frontend_path, template_path, app_name):
-    """Setup frontend infrastructure"""
+FRONTEND_SETUP_DIR = Path(__file__).parent.parent / "templates" / "code" / "frontend"
+
+EXTRA_NPM_DEPS = [
+    "@tanstack/react-query",
+    "react-hook-form",
+    "@hookform/resolvers",
+    "zod",
+    "sonner",
+]
+
+# Style presets — nom lisible → code shadcn
+SHADCN_STYLE_PRESETS = {
+    "vega":  {"code": "bIkeymG",  "desc": "Simple, equilibre, classique (defaut)"},
+    "luma":  {"code": "b1VlIttI", "desc": "Arrondi, soft, genereux en spacing"},
+    "lyra":  {"code": "buFznsW",  "desc": "Sharp, boxy, police monospace (JetBrains)"},
+    "mira":  {"code": "b1D0eCA4", "desc": "Compact, dense, optimise pour beaucoup de donnees"},
+}
+DEFAULT_STYLE = "vega"
+
+
+def resolve_preset(preset_arg):
+    """Resolve preset: accept style name (vega/luma/lyra/mira) or raw code."""
+    if not preset_arg:
+        return SHADCN_STYLE_PRESETS[DEFAULT_STYLE]["code"]
+    if preset_arg in SHADCN_STYLE_PRESETS:
+        return SHADCN_STYLE_PRESETS[preset_arg]["code"]
+    return preset_arg
+
+
+def setup_frontend(frontend_path, app_name, shadcn_preset=None):
+    """Setup frontend via shadcn init --preset + custom infra injection"""
     print_step("2", "10", "Frontend Setup")
 
     frontend_path = Path(frontend_path)
-    template_path = Path(template_path)
 
-    # 1. Copy template
-    print("\n📂 Copying frontend template...")
+    # ── Step 1: shadcn init ──────────────────────────────
     if frontend_path.exists():
-        print_warning("Frontend directory already exists, skipping copy")
+        print_warning("Frontend directory already exists, skipping shadcn init")
     else:
-        if not template_path.exists():
-            print_error(f"Template not found at {template_path}")
+        print("\n📦 Creating Next.js project via shadcn init...")
+        parent = frontend_path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+
+        resolved = resolve_preset(shadcn_preset)
+        preset_flag = f"--preset {resolved}"
+        cmd = (
+            f"npx shadcn@latest init {preset_flag} "
+            f"--name {frontend_path.name} --template next --yes"
+        )
+        if not run_command(cmd, cwd=parent, shell=True):
+            print_error("shadcn init failed")
             sys.exit(1)
-        shutil.copytree(template_path, frontend_path)
-        print_success("Frontend template copied")
+        style_name = shadcn_preset if shadcn_preset in SHADCN_STYLE_PRESETS else "custom"
+        print_success(f"Project created with style: {style_name} (preset: {resolved})")
 
-    # 2. Update package.json
-    print("\n📝 Updating package.json...")
-    package_json = frontend_path / "package.json"
-    if package_json.exists():
-        with open(package_json, 'r') as f:
-            content = f.read()
-
-        # Replace name
-        content = content.replace('"name": "frontend-template"', f'"name": "{app_name}"')
-
-        with open(package_json, 'w') as f:
-            f.write(content)
-
-        print_success(f"package.json updated with name: {app_name}")
+    # ── Step 2: Install base shadcn components ───────────
+    print("\n📦 Installing base shadcn components...")
+    components_file = FRONTEND_SETUP_DIR / "shadcn-base-components.txt"
+    if components_file.exists():
+        components = " ".join(
+            line.strip()
+            for line in components_file.read_text().splitlines()
+            if line.strip()
+        )
+        cmd = f"npx shadcn@latest add {components} --yes"
+        if not run_command(cmd, cwd=frontend_path, shell=True):
+            print_warning("Some shadcn components failed to install")
+        else:
+            print_success(f"Base components installed: {components}")
     else:
-        print_warning("package.json not found")
+        print_warning("shadcn-base-components.txt not found, skipping")
 
-    # 3. Create .env.local
+    # ── Step 3: Install extra npm deps ───────────────────
+    print("\n📦 Installing extra dependencies...")
+    deps = " ".join(EXTRA_NPM_DEPS)
+    if not run_command(f"npm install {deps}", cwd=frontend_path, shell=True):
+        print_error("Failed to install extra dependencies")
+        sys.exit(1)
+    print_success(f"Extra deps installed: {deps}")
+
+    # ── Step 4: Inject spacing tokens into globals.css ───
+    print("\n🎨 Injecting spacing tokens into globals.css...")
+    globals_css = frontend_path / "app" / "globals.css"
+    if not globals_css.exists():
+        globals_css = frontend_path / "src" / "app" / "globals.css"
+
+    if globals_css.exists():
+        content = globals_css.read_text()
+
+        # 4a. Inject spacing tokens into :root
+        tokens_file = FRONTEND_SETUP_DIR / "inject" / "globals-spacing-tokens.css"
+        if tokens_file.exists():
+            tokens_snippet = tokens_file.read_text()
+            # Insert after the first --radius line in :root
+            if "--radius:" in content and "space-xs" not in content:
+                content = content.replace(
+                    "    --radius:",
+                    tokens_snippet + "\n    --radius:",
+                )
+                print_success("Spacing tokens injected into :root")
+            elif "space-xs" in content:
+                print_warning("Spacing tokens already present, skipping")
+            else:
+                print_warning("Could not find --radius in :root, appending tokens")
+                root_idx = content.find(":root {")
+                if root_idx != -1:
+                    brace_idx = content.find("{", root_idx)
+                    content = (
+                        content[: brace_idx + 1]
+                        + "\n"
+                        + tokens_snippet
+                        + content[brace_idx + 1 :]
+                    )
+
+        # 4b. Inject spacing mappings into @theme inline
+        mappings_file = FRONTEND_SETUP_DIR / "inject" / "theme-spacing-mappings.css"
+        if mappings_file.exists():
+            mappings_snippet = mappings_file.read_text()
+            if "spacing-page" not in content:
+                theme_idx = content.find("@theme inline {")
+                if theme_idx != -1:
+                    brace_idx = content.find("{", theme_idx)
+                    content = (
+                        content[: brace_idx + 1]
+                        + "\n"
+                        + mappings_snippet
+                        + content[brace_idx + 1 :]
+                    )
+                    print_success("Spacing mappings injected into @theme inline")
+                else:
+                    print_warning("@theme inline not found in globals.css")
+            else:
+                print_warning("Spacing mappings already present, skipping")
+
+        globals_css.write_text(content)
+    else:
+        print_error("globals.css not found")
+
+    # ── Step 5: Copy custom files ────────────────────────
+    print("\n📂 Copying custom infrastructure files...")
+    create_dir = FRONTEND_SETUP_DIR / "create"
+    if create_dir.exists():
+        copied = 0
+        for src_file in create_dir.rglob("*"):
+            if src_file.is_file():
+                rel = src_file.relative_to(create_dir)
+                dest = frontend_path / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if not dest.exists():
+                    shutil.copy2(src_file, dest)
+                    copied += 1
+                else:
+                    print_warning(f"  {rel} already exists, skipping")
+        print_success(f"Copied {copied} custom files")
+    else:
+        print_warning("create/ directory not found")
+
+    # ── Step 6: Create .env.local ────────────────────────
     print("\n⚙️  Creating .env.local...")
     env_local = frontend_path / ".env.local"
-    with open(env_local, 'w') as f:
-        f.write("NEXT_PUBLIC_API_URL=http://localhost:8000\n")
-    print_success(".env.local created")
-
-    # 4. Update layout.tsx metadata
-    print("\n🎨 Updating layout metadata...")
-    layout_file = frontend_path / "src" / "app" / "layout.tsx"
-    if layout_file.exists():
-        with open(layout_file, 'r') as f:
-            content = f.read()
-
-        # Replace title
-        content = content.replace('title: "Frontend Template"', f'title: "{app_name}"')
-
-        with open(layout_file, 'w') as f:
-            f.write(content)
-
-        print_success("layout.tsx metadata updated")
+    if not env_local.exists():
+        env_local.write_text("NEXT_PUBLIC_API_URL=http://localhost:8000\n")
+        print_success(".env.local created")
     else:
-        print_warning("layout.tsx not found")
+        print_warning(".env.local already exists, skipping")
 
-    # 5. Create providers.tsx
-    print("\n⚙️  Creating providers.tsx...")
-    providers_file = frontend_path / "src" / "components" / "providers.tsx"
-    providers_file.parent.mkdir(parents=True, exist_ok=True)
+    # ── Step 7: Inject rewrites into next.config ─────────
+    print("\n⚙️  Configuring API proxy rewrites...")
+    next_config = None
+    for name in ["next.config.mjs", "next.config.ts", "next.config.js"]:
+        candidate = frontend_path / name
+        if candidate.exists():
+            next_config = candidate
+            break
 
-    providers_content = '''\'use client\'
+    if next_config:
+        nc_content = next_config.read_text()
+        if "rewrites" not in nc_content:
+            rewrites_file = FRONTEND_SETUP_DIR / "inject" / "next-config-rewrites.txt"
+            if rewrites_file.exists():
+                rewrites_snippet = rewrites_file.read_text()
+                # Handle both formats: `const nextConfig = {}` and `const nextConfig: NextConfig = { ... };`
+                if "const nextConfig = {}" in nc_content:
+                    nc_content = nc_content.replace(
+                        "const nextConfig = {}",
+                        "const nextConfig = {\n  " + rewrites_snippet + "\n}",
+                    )
+                elif "};" in nc_content:
+                    nc_content = nc_content.replace(
+                        "};",
+                        "  " + rewrites_snippet + "\n};",
+                        1,
+                    )
+                else:
+                    print_warning("Could not find config object pattern in next.config")
+                next_config.write_text(nc_content)
+                print_success("API rewrites injected into next.config")
+            else:
+                print_warning("next-config-rewrites.txt not found")
+        else:
+            print_warning("Rewrites already configured, skipping")
+    else:
+        print_warning("next.config not found")
 
-import { QueryClient, QueryClientProvider } from \'@tanstack/react-query\'
-import { useState } from \'react\'
-
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 60 * 1000,
-        refetchOnWindowFocus: false,
-      },
-    },
-  }))
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
-  )
-}
-'''
-
-    with open(providers_file, 'w') as f:
-        f.write(providers_content)
-    print_success("providers.tsx created")
-
-    # 6. Install dependencies
-    print("\n📦 Installing npm dependencies...")
-    print("   This may take a few minutes...")
-
-    if not run_command("npm install", cwd=frontend_path, shell=True):
-        print_error("Failed to install npm dependencies")
-        sys.exit(1)
-
-    print_success("npm dependencies installed")
     print_success("Frontend setup complete")
     return True
 
@@ -519,11 +623,11 @@ def print_final_report(app_name, backend_path, frontend_path, db_name, admin_cre
    ✅ .env configured
 
 🎨 Frontend: {frontend_path}
-   ✅ Structure copied
-   ✅ package.json updated
-   ✅ .env.local created
-   ✅ Layout components created
-   ✅ npm dependencies installed
+   ✅ shadcn init (preset applied)
+   ✅ Base components installed
+   ✅ Spacing tokens injected
+   ✅ Custom infra files copied
+   ✅ API proxy configured
 
 {'='*60}
 
@@ -562,14 +666,14 @@ def main():
         help="Chemin template backend"
     )
     parser.add_argument(
-        "--frontend-template",
-        default=".claude/resources/templates/code/frontend",
-        help="Chemin template frontend"
-    )
-    parser.add_argument(
         "--create-admin",
         action="store_true",
         help="Créer un admin user initial (admin@admin.admin / adminadmin)"
+    )
+    parser.add_argument(
+        "--shadcn-preset",
+        default=None,
+        help="Code preset shadcn (ex: bdKT6wBM). Sans preset = defaults shadcn."
     )
 
     args = parser.parse_args()
@@ -583,6 +687,7 @@ App Name: {args.app_name}
 Backend: {args.backend_path}
 Frontend: {args.frontend_path}
 Database: {args.app_name}-db
+Preset: {args.shadcn_preset or 'defaults'}
 
 {'='*60}
 """)
@@ -602,8 +707,8 @@ Database: {args.app_name}-db
     # 2. Setup frontend
     setup_frontend(
         args.frontend_path,
-        args.frontend_template,
-        args.app_name
+        args.app_name,
+        args.shadcn_preset
     )
 
     # 3. Final report

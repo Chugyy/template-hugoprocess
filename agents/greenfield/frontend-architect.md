@@ -87,22 +87,36 @@ shadcn = composants de base (Button, Card, Dialog, Table, etc.) + composants plu
 
 Origin UI = 537 composants prêts à l'emploi, souvent des assemblages shadcn plus élaborés (cards, forms, stats, layouts, etc.)
 
+#### 5c. Chercher dans les registries shadcn recommandés
+
+Consulter la liste des registries dans les best practices (`component-registries.md`). Pour les composants avancés (file upload, data table complexe, animations, chat IA, éditeur rich text), des registries tiers offrent des composants prêts à l'emploi qui héritent automatiquement du design du projet.
+
+Registries principaux à considérer :
+- `@sadmann7` (Dice UI) — file upload, multi-select, tags input, combobox
+- `@shadcnblocks` — pages entières (dashboard, login, pricing, settings)
+- `@magicuidesign` (Magic UI) — composants animés pour landing pages
+- `@imskyleen` (Animate UI) — animations reveal, fade, scale, slide
+- `@udecode` (Plate) — éditeur rich text
+- `@assistant-ui` — chat IA style ChatGPT
+
 #### Ordre de priorité
 
-1. **shadcn** : composant de base qui fait le job tel quel
-2. **Origin UI** : composant plus riche/composé qui correspond au besoin
-3. **Composé** : assemblage manuel de composants existants (rien trouvé dans les registres)
-4. **Nouveau** : custom uniquement si rien n'existe
+1. **shadcn officiel** (`@shadcn-ui`) : composant de base qui fait le job tel quel
+2. **Registry tiers** (`@sadmann7`, `@magicuidesign`, etc.) : composant avancé prêt à l'emploi — mentionner le namespace et la commande d'install
+3. **Origin UI** (via MCP) : composant composé riche qui correspond au besoin
+4. **Composé** : assemblage manuel de composants existants (RIEN trouvé dans les registries)
+5. **Nouveau** : custom uniquement si rien n'existe (justifier)
 
 ### 6. Classifier chaque composant
 
 | Type | Définition | Source |
 |------|-----------|--------|
 | **Existant** | Composant UI disponible tel quel | `ui/{name}.tsx` |
+| **Registry** | Composant d'un registry tiers | `npx shadcn@latest add @namespace/composant` — mentionner namespace + commande |
 | **Origin UI** | Composant Origin UI à installer | `npx shadcn@latest add {origin_ui_url}` — mentionner le nom et la catégorie |
-| **Composé** | Assemblage de composants existants (AUCUN Origin UI trouvé) | Décomposer en sous-composants |
+| **Composé** | Assemblage de composants existants (RIEN trouvé dans registries/Origin UI) | Décomposer en sous-composants |
 | **Référence** | Composant inspiré d'un projet existant | `templates/projects/{project}/` — mentionner le chemin source |
-| **Nouveau** | À créer (AUCUN Origin UI ni shadcn trouvé) | Custom uniquement |
+| **Nouveau** | À créer (RIEN trouvé nulle part) | Custom uniquement — justifier |
 
 ### 6. Mapper les endpoints API
 
@@ -122,13 +136,39 @@ Préciser : Method, Query/Body params, Trigger, Success behavior, Error behavior
 # Frontend Architecture
 
 ## Branding & Theming
-- Style shadcn : {preset}
-- Base color : {valeur}
-- Theme color : {valeur}
-- Font : {nom}
-- Border radius : {valeur}
+
+### Style shadcn (choisir UN) :
+
+| Style | Code preset | Description | Quand l'utiliser |
+|-------|-------------|-------------|------------------|
+| **vega** | `bIkeymG` | Simple, equilibre, classique | **Defaut** — apps generiques, SaaS, dashboards |
+| **luma** | `b1VlIttI` | Arrondi, soft, genereux en spacing | Apps grand public, onboarding, B2C |
+| **lyra** | `buFznsW` | Sharp, boxy, police monospace (JetBrains) | Dev tools, CLI, terminals, code-centric |
+| **mira** | `b1D0eCA4` | Compact, dense, data-heavy | Dashboards analytics, CRM, admin panels |
+
+- Style choisi : {vega|luma|lyra|mira}
+- Preset code : {code correspondant}
 - Dark mode : {oui/non, défaut}
-- CSS Variables clés : {primary, background, foreground, etc.}
+- Personnalisation couleur : {si le client a une charte, mentionner les couleurs oklch — sinon "defaults du preset"}
+
+## Spacing & Sizing
+
+Les tokens de spacing sont définis dans globals.css et mappés dans @theme inline.
+NE PAS inventer de valeurs — utiliser exclusivement ces tokens :
+
+| Token | Classe Tailwind | Valeur | Usage |
+|-------|----------------|--------|-------|
+| --page-padding | p-page | 1.5rem | Padding du <main> dans le layout |
+| --section-gap | gap-section | 1.5rem | Espace entre sections d'une page |
+| --component-gap | gap-component | 1rem | Espace entre composants dans une section |
+| --card-padding | p-card | 1.5rem | Padding interne des cards (géré par Card) |
+
+**Règles** :
+- Les pages utilisent `PageContainer` (gap-section) + `PageHeader` + `PageTitle`
+- Spacing entre enfants = `gap-*` sur le parent, JAMAIS `mb-*` sur les enfants
+- JAMAIS `space-y-*` ou `space-x-*` — toujours `gap-*`
+- Les composants primitifs (Card, Button) gèrent leur padding interne — ne pas en rajouter
+- Les composants composés COMPOSENT les primitifs sans ajouter de styling
 
 ## Projets de Référence
 

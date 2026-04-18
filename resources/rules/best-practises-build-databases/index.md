@@ -10,6 +10,7 @@
 8. [Performance et Optimisation](performance-et-optimisation.md)
 9. [Maintenance et Documentation](maintenance-et-documentation.md)
 10. [Erreurs Courantes à Éviter](erreurs-courantes-a-eviter.md)
-11. [Conclusion](conclusion.md)
+11. [Stockage JSON/JSONB](json-storage.md)
+12. [Conclusion](conclusion.md)
 
 ***

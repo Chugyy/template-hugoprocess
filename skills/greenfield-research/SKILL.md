@@ -3,18 +3,18 @@ name: greenfield-research
 description: >
   Recherche technique des services externes identifies dans les jobs.
   Verifie la librairie partagee, recherche si necessaire, demande credentials,
-  cree le .env. Source unique : ../lib/researches/
+  cree le .env. Source unique : .claude/resources/researches/
 allowed-tools: Read, Write, WebSearch, WebFetch, Glob, Grep, Bash
 model: opus
 user-invocable: true
 disable-model-invocation: false
 ---
 
-> **Convention projet** : Tous les chemins `docs/` et `dev/` sont relatifs au dossier projet actif. La librairie partagee est a `../lib/researches/` (niveau workspace).
+> **Convention projet** : Tous les chemins `docs/` et `dev/` sont relatifs au dossier projet actif. Les recherches sont dans `.claude/resources/researches/`.
 
 # Recherche des services externes
 
-Source unique de verite pour les recherches : `../lib/researches/`. Pas de copie dans le projet.
+Source unique de verite pour les recherches : `.claude/resources/researches/`. Pas de copie dans le projet.
 
 ## Prerequis
 
@@ -28,7 +28,7 @@ Source unique de verite pour les recherches : `../lib/researches/`. Pas de copie
 
 ## Phase 1 — Verifier la librairie
 
-Pour chaque service identifie, verifier si `../lib/researches/{service}.md` existe.
+Pour chaque service identifie, verifier si `.claude/resources/researches/{service}.md` existe.
 
 | Service | Dans la librairie ? | Action |
 |---------|-------------------|--------|
@@ -47,9 +47,11 @@ Pour chaque service NON present dans la librairie :
 2. **WebFetch** pages cles (quickstart, API reference, pricing)
 3. Extraire : SDK + version, auth, endpoints, formats I/O, limites, couts, exemples de code
 
+**IMPORTANT — Pas de vrais credentials dans les recherches** : les fichiers `.claude/resources/researches/*.md` sont versionnés dans git. Ne JAMAIS y mettre de vrais tokens, clés API, webhooks ou secrets. Utiliser des placeholders (`<SLACK_WEBHOOK_URL>`, `{API_KEY}`, `YOUR_TOKEN_HERE`) dans les exemples de code et endpoints.
+
 ### 2.2 Ecrire dans la librairie
 
-Creer `../lib/researches/{service}.md` :
+Creer `.claude/resources/researches/{service}.md` :
 
 ```markdown
 # {Service Name} — Research
@@ -138,7 +140,7 @@ Ce fichier sera copie dans `dev/backend/.env` par le build (Phase 0 setup).
 
 ```
 Livrables :
-  ../lib/researches/{service}.md  — Recherches (source unique, partagee)
+  .claude/resources/researches/{service}.md  — Recherches (source unique)
   docs/.env                       — Credentials pour le build
 
 Next Step : architecture (/arch-business-logic, /arch-schema, etc.)

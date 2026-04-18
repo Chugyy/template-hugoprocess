@@ -41,8 +41,37 @@ Si les JSON configs sont absents → STOP → `/greenfield-architecture`
 python .claude/resources/scripts/setup-infrastructure.py \
   --app-name {app_name} \
   --backend-path {project}/dev/backend \
-  --frontend-path {project}/dev/frontend
+  --frontend-path {project}/dev/frontend \
+  --shadcn-preset {preset_code}
 ```
+
+Le `--shadcn-preset` vient de `frontend-architecture.md` (section Branding & Theming).
+Accepte un nom de style (`vega`, `luma`, `lyra`, `mira`) ou un code preset brut.
+Sans preset, le script utilise `vega` par defaut.
+
+| Style | Usage | Code |
+|-------|-------|------|
+| vega | Classique, equilibre (defaut) | `bIkeymG` |
+| luma | Arrondi, soft | `b1VlIttI` |
+| lyra | Sharp, monospace | `buFznsW` |
+| mira | Compact, data-dense | `b1D0eCA4` |
+
+### GitHub — Init repo (checkpoint humain)
+
+Apres le setup infrastructure, proposer a l'utilisateur :
+
+> Tu veux creer un repo GitHub maintenant ? Ca permet d'avoir un point de retour des le debut du build. Si non, on pourra le faire au deploiement.
+
+**Si oui** :
+```bash
+cd {project}/dev
+git init
+gh repo create {repo_name} --private --source=. --push
+```
+
+**Si non** : continuer sans. Le repo sera cree au deploiement si necessaire.
+
+Stocker le choix pour la suite (variable `HAS_GITHUB_REPO`).
 
 ---
 
@@ -88,7 +117,7 @@ source .venv/bin/activate && python -m pytest tests/test_crud/ tests/test_routes
 
 ```
 Pour chaque service dans services/:
-  Agent(build-service, prompt="service_name: {service}, backend_path: dev/backend, research_path: ../lib/researches/{service}.md. Le squelette existe — remplir l'implementation reelle. Lire config.py EN PREMIER.")
+  Agent(build-service, prompt="service_name: {service}, backend_path: dev/backend, research_path: .claude/resources/researches/{service}.md. Le squelette existe — remplir l'implementation reelle. Lire config.py EN PREMIER.")
 ```
 
 Apres chaque agent service, tester uniquement ce service :
@@ -331,6 +360,23 @@ Tests finaux :
 
 L'application est prete.
 ```
+
+### Git push (si repo GitHub existe)
+
+Si un repo GitHub a ete cree en Phase 0, faire un commit + push de la version stable :
+
+```bash
+cd {project}/dev
+git add -A
+git commit -m "Build complete — stable version"
+git push
+```
+
+> Cette version stable est ton point de retour. Avant d'attaquer des modifications ou de nouvelles features, tu pourras toujours revenir ici.
+
+Si pas de repo GitHub, proposer :
+
+> Le build est termine. Tu veux creer un repo GitHub maintenant pour sauvegarder cette version stable ?
 
 ---
 
